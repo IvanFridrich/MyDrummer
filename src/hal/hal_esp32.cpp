@@ -4,8 +4,13 @@
 #include "hal_factory.hpp"
 #include "defines.hpp"
 
+// Framework headers use old-style casts; silence them for the include block
+// without disabling the warning for our own code.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
 #include <Arduino.h>
 #include <driver/i2s.h>
+#pragma GCC diagnostic pop
 
 namespace dummer { namespace hal {
 
@@ -29,7 +34,7 @@ class Esp32I2s : public II2s {
   public:
     bool init(int sample_rate, int bclk, int lrck, int dout) override {
         i2s_config_t cfg = {};
-        cfg.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX);
+        cfg.mode = static_cast<i2s_mode_t>(I2S_MODE_MASTER | I2S_MODE_TX);
         cfg.sample_rate = sample_rate;
         cfg.bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT;
         cfg.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT;
@@ -56,18 +61,32 @@ class Esp32I2s : public II2s {
 
     size_t write_nonblocking(const int16_t* buf, size_t samples) override {
         // PCM5102 wants 32-bit slots with 16-bit data left-shifted into the
-        // upper bits. Same sample to both channels (mono).
-        size_t written = 0;
+        // upper bits. Same sample on both channels (mono).
+        //
+        // One i2s_write per chunk — per-sample calls cost ~50 us of
+        // FreeRTOS-lock overhead each and quickly starve the DMA ring.
+        constexpr size_t kMaxSamples = static_cast<size_t>(AUDIO_CHUNK);
+        if (samples > kMaxSamples) samples = kMaxSamples;
+
+        uint32_t frames[AUDIO_CHUNK * 2];   // [L,R,L,R,...]
         for (size_t i = 0; i < samples; ++i) {
-            int32_t s = ((int32_t)buf[i]) << 16;
-            int32_t stereo[2] = { s, s };
-            size_t bytes_written = 0;
-            esp_err_t err = i2s_write(I2S_NUM, stereo, sizeof(stereo),
-                                      &bytes_written, /*ticks_to_wait=*/0);
-            if (err != ESP_OK || bytes_written < sizeof(stereo)) break;
-            ++written;
+            // Offset binary: XOR the sign bit so silence maps to 0x8000_0000
+            // rather than 0x0000_0000. Two's complement and offset binary differ
+            // only in the MSB; this is what the PCM5102 expects in some wiring
+            // configs when the ESP32 driver sends unsigned data words.
+            const auto unsigned_sample =
+                static_cast<uint16_t>(static_cast<uint16_t>(buf[i]) ^ 0x8000u);
+            const uint32_t frame = static_cast<uint32_t>(unsigned_sample) << 16;
+            frames[2 * i + 0] = frame;
+            frames[2 * i + 1] = frame;
         }
-        return written;
+
+        size_t bytes_written = 0;
+        const size_t bytes_to_write = samples * 2 * sizeof(uint32_t);
+        const esp_err_t err = i2s_write(I2S_NUM, frames, bytes_to_write,
+                                        &bytes_written, /*ticks_to_wait=*/0);
+        if (err != ESP_OK) return 0;
+        return bytes_written / (2 * sizeof(uint32_t));
     }
 };
 
@@ -79,7 +98,7 @@ class Esp32Serial : public ISerial {
 
 class Esp32Clock : public IClock {
   public:
-    uint64_t micros() override { return (uint64_t)::micros(); }
+    uint64_t micros() override { return static_cast<uint64_t>(::micros()); }
     uint32_t millis() override { return ::millis(); }
     void delay_ms(uint32_t ms) override { ::delay(ms); }
 };

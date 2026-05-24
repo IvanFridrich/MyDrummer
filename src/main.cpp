@@ -1,14 +1,20 @@
-// Milestone 1: project skeleton. Boots, blinks the heartbeat LED, echoes
-// button events to serial. No audio yet — that arrives in milestone 2.
+// Milestone 2: WAV pipeline + Voice + VoicePool + Mixer, audio driven over
+// I2S to the PCM5102. Drum buttons (kick / snare / hihat) trigger samples;
+// reverb / looper / autodrum buttons stay inert until later milestones.
 //
-// Architecture (spec §4): setup() configures HAL + modules, then spawns one
-// FreeRTOS task pinned to core 1. That task runs the unbounded super-loop.
-// Arduino's loop() stays empty.
+// Super-loop (spec §4): poll buttons → tick LEDs → (scheduler later) →
+// drain staging to I2S (non-blocking) → if staging empty, pull a fresh
+// chunk from the mixer.
 #ifdef BUILD_ESP32
 
+// Framework headers use old-style casts; silence the warning for the include
+// block only.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#pragma GCC diagnostic pop
 
 #include "defines.hpp"
 #include "hal/hal.hpp"
@@ -16,6 +22,9 @@
 #include "util/log.hpp"
 #include "control/button_manager.hpp"
 #include "control/led_manager.hpp"
+#include "audio/voice_pool.hpp"
+#include "audio/mixer.hpp"
+#include "samples.hpp"
 
 using ::dummer::hal::HalFactory;
 using ::dummer::hal::Hal;
@@ -24,14 +33,23 @@ using ::dummer::control::ButtonEvent;
 using ::dummer::control::ButtonEventType;
 using ::dummer::control::LedManager;
 using ::dummer::control::LedId;
+using ::dummer::audio::VoicePool;
+using ::dummer::audio::Mixer;
+using ::dummer::audio::SampleId;
+using ::dummer::audio::kSampleTable;
+using ::dummer::audio::SAMPLE_COUNT;
 
 namespace {
 
-Hal*          g_hal = nullptr;
+Hal*           g_hal     = nullptr;
 ButtonManager* g_buttons = nullptr;
-LedManager*    g_leds = nullptr;
+LedManager*    g_leds    = nullptr;
+VoicePool*     g_pool    = nullptr;
+Mixer*         g_mixer   = nullptr;
 
-const char* event_name(ButtonEventType t) {
+constexpr uint8_t INVALID_SAMPLE = 0xFF;
+
+[[maybe_unused]] const char* event_name(ButtonEventType t) {
     switch (t) {
         case ButtonEventType::Press:     return "PRESS";
         case ButtonEventType::Release:   return "RELEASE";
@@ -40,8 +58,17 @@ const char* event_name(ButtonEventType t) {
     }
 }
 
+uint8_t drum_sample_for(uint8_t idx) {
+    switch (static_cast<ButtonRole>(idx)) {
+        case ButtonRole::Kick:      return static_cast<uint8_t>(SampleId::SAMPLE_KICK);
+        case ButtonRole::Snare:     return static_cast<uint8_t>(SampleId::SAMPLE_SNARE);
+        case ButtonRole::HihatOpen: return static_cast<uint8_t>(SampleId::SAMPLE_HIHAT_OPEN);
+        default:                    return INVALID_SAMPLE;
+    }
+}
+
 LedId led_for_button(uint8_t idx) {
-    switch ((ButtonRole)idx) {
+    switch (static_cast<ButtonRole>(idx)) {
         case ButtonRole::Kick:      return LedId::Kick;
         case ButtonRole::Snare:     return LedId::Snare;
         case ButtonRole::HihatOpen: return LedId::Hihat;
@@ -50,26 +77,49 @@ LedId led_for_button(uint8_t idx) {
 }
 
 void app_task(void*) {
-    // Super-loop. Must never block for more than ~1 ms anywhere.
+    static int16_t staging[AUDIO_CHUNK];
+    size_t staging_head  = 0;
+    size_t staging_count = 0;
+
     for (;;) {
-        // 1. Drain all button events this iteration.
+        // 1. Drain all queued button events this iteration.
         for (;;) {
             ButtonEvent ev = g_buttons->poll();
             if (ev.type == ButtonEventType::None) break;
             LOG_I("BTN", "%s idx=%u pin=%d",
-                  event_name(ev.type), (unsigned)ev.index,
+                  event_name(ev.type), static_cast<unsigned>(ev.index),
                   g_buttons->pin_of(ev.index));
             if (ev.type == ButtonEventType::Press) {
-                g_leds->flash(led_for_button(ev.index));
+                const uint8_t sid = drum_sample_for(ev.index);
+                if (sid != INVALID_SAMPLE) {
+                    g_pool->trigger(sid);
+                    g_leds->flash(led_for_button(ev.index));
+                }
             }
         }
 
-        // 2. Advance LED timers (flash expiry, heartbeat).
+        // 2. LED timers / heartbeat.
         g_leds->tick();
 
-        // 3. (milestone 2+: scheduler, audio pull, I2S drain, profiler)
+        // 3. (milestone 5/6: looper + auto-drummer scheduler ticks here)
 
-        // Yield to the IDLE/WDT every iteration; 1 tick = 1 ms by default.
+        // 4. Non-blocking drain of staging buffer into I2S DMA.
+        if (staging_count > 0) {
+            size_t written = g_hal->i2s->write_nonblocking(
+                staging + staging_head, staging_count);
+            staging_head  += written;
+            staging_count -= written;
+        }
+
+        // 5. Refill staging if empty.
+        if (staging_count == 0) {
+            g_mixer->get_samples(staging, AUDIO_CHUNK);
+            staging_head  = 0;
+            staging_count = AUDIO_CHUNK;
+        }
+
+        // 6. Yield 1 ms — IDLE / WDT keep healthy. Buttons still polled
+        //    every iteration. DMA holds ~11 ms of audio so this is safe.
         vTaskDelay(1);
     }
 }
@@ -80,21 +130,35 @@ void setup() {
     g_hal = HalFactory::create();
     g_hal->serial->init(115200);
     ::dummer::log::set_sink(g_hal->serial);
-    LOG_I("BOOT", "Dummer milestone 1 — skeleton up");
+    LOG_I("BOOT", "Dummer milestone 2 — audio engine up");
+
+    if (!g_hal->i2s->init(SAMPLE_RATE, I2S_BCLK, I2S_LRCK, I2S_DOUT)) {
+        LOG_E("BOOT", "I2S init failed");
+    }
 
     static ButtonManager bm(g_hal->gpio, g_hal->clock);
     static LedManager    lm(g_hal->gpio, g_hal->clock);
+    static VoicePool     vp;
+    static Mixer         mx(vp, kSampleTable, static_cast<uint8_t>(SAMPLE_COUNT));
+
     g_buttons = &bm;
     g_leds    = &lm;
+    g_pool    = &vp;
+    g_mixer   = &mx;
+
     g_buttons->begin();
     g_leds->begin();
 
     BaseType_t ok = xTaskCreatePinnedToCore(
         app_task, "dummer", APP_TASK_STACK, nullptr,
         APP_TASK_PRIORITY, nullptr, APP_TASK_CORE);
+    // pdPASS is `((BaseType_t)1)` — wrap the comparison to keep -Wold-style-cast quiet.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
     if (ok != pdPASS) {
         LOG_E("BOOT", "xTaskCreatePinnedToCore failed");
     }
+#pragma GCC diagnostic pop
 }
 
 void loop() {

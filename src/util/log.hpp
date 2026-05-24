@@ -32,10 +32,10 @@ inline void emit(char level, const char* tag, const char* fmt, ...) {
     char buf[160];
     int n = snprintf(buf, sizeof(buf), "[%c][%s] ", level, tag);
     if (n < 0) return;
-    if ((size_t)n >= sizeof(buf)) n = sizeof(buf) - 1;
+    if (static_cast<size_t>(n) >= sizeof(buf)) n = sizeof(buf) - 1;
     va_list ap;
     va_start(ap, fmt);
-    vsnprintf(buf + n, sizeof(buf) - (size_t)n, fmt, ap);
+    vsnprintf(buf + n, sizeof(buf) - static_cast<size_t>(n), fmt, ap);
     va_end(ap);
     // Force a trailing newline; reserve last 2 slots.
     size_t len = 0; while (len < sizeof(buf) && buf[len]) ++len;

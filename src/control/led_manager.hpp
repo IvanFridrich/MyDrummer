@@ -37,6 +37,15 @@ class LedManager {
     // Tick to advance flash timers / heartbeat. Call every super-loop iteration.
     void tick();
 
+#ifdef BUILD_NATIVE_TEST
+    // Test hook — defines.hpp leaves most LED pins at -1 (no-op). Tests need
+    // real pin numbers to exercise the flash / steady paths.
+    void set_pin_for_test(LedId id, int pin) {
+        const auto i = static_cast<uint8_t>(id);
+        if (i < static_cast<uint8_t>(LedId::Count)) slots_[i].pin = pin;
+    }
+#endif
+
   private:
     struct Slot {
         int      pin;
@@ -47,7 +56,8 @@ class LedManager {
 
     ::dummer::hal::IGpio*  gpio_;
     ::dummer::hal::IClock* clock_;
-    Slot                   slots_[(size_t)LedId::Count];
+    static constexpr size_t kSlotCount = static_cast<size_t>(LedId::Count);
+    Slot                   slots_[kSlotCount];
     uint32_t               heartbeat_next_toggle_ms_;
     bool                   heartbeat_level_;
 

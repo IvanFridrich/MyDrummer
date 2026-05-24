@@ -74,7 +74,7 @@ ButtonEvent ButtonManager::poll() {
             s.last_change_ms = now;
         }
 
-        const bool stable = (uint32_t)(now - s.last_change_ms) >= (uint32_t)BUTTON_DEBOUNCE_MS;
+        const bool stable = (now - s.last_change_ms) >= static_cast<uint32_t>(BUTTON_DEBOUNCE_MS);
         const bool target_pressed = pin_to_pressed(s.raw_level);
 
         if (stable && target_pressed != s.debounced_pressed) {
@@ -91,8 +91,8 @@ ButtonEvent ButtonManager::poll() {
         // Long-press detection: while held, after BUTTON_LONGPRESS_MS since
         // the debounced press began, fire LongPress exactly once.
         if (s.debounced_pressed && !s.long_press_fired) {
-            const uint32_t held = (uint32_t)(now - s.press_started_ms);
-            if (held >= (uint32_t)BUTTON_LONGPRESS_MS) {
+            const uint32_t held = now - s.press_started_ms;
+            if (held >= static_cast<uint32_t>(BUTTON_LONGPRESS_MS)) {
                 s.long_press_fired = true;
                 s.pend_long        = true;
             }

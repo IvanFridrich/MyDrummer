@@ -73,12 +73,12 @@ class NativeSerial : public ISerial {
 class NativeClock : public IClock {
   public:
     uint64_t micros() override { return now_us_; }
-    uint32_t millis() override { return (uint32_t)(now_us_ / 1000); }
-    void     delay_ms(uint32_t ms) override { now_us_ += (uint64_t)ms * 1000; }
+    uint32_t millis() override { return static_cast<uint32_t>(now_us_ / 1000); }
+    void     delay_ms(uint32_t ms) override { now_us_ += static_cast<uint64_t>(ms) * 1000; }
 
     // --- test helpers ---
     void advance_us(uint64_t us)   { now_us_ += us; }
-    void advance_ms(uint32_t ms)   { now_us_ += (uint64_t)ms * 1000; }
+    void advance_ms(uint32_t ms)   { now_us_ += static_cast<uint64_t>(ms) * 1000; }
     void set_now_us(uint64_t us)   { now_us_ = us; }
 
   private:

@@ -17,7 +17,9 @@
 #define I2S_BCLK                    26
 #define I2S_LRCK                    25
 #define I2S_DOUT                    22
-#define I2S_DMA_BUF_COUNT           4
+// Spec §2 quoted 4×128; bumped to 8 buffers (~23 ms cushion) to ride out
+// any timing jitter from the cooperative super-loop.
+#define I2S_DMA_BUF_COUNT           8
 #define I2S_DMA_BUF_LEN             128
 
 // ===== Voice pool =====
@@ -25,6 +27,12 @@
 #define ENABLE_RETRIGGER_DECAY      1
 #define RETRIGGER_FADE_K_Q15        32530    // ~0.99326 -> -60 dB in ~23 ms
 #define VOICE_END_RAMP_SAMPLES      64
+
+// Per-voice trigger gain. Spec §2 calls for full-scale output (32767) with
+// the analog pot doing the volume work. Until the pot is wired, lower this
+// to attenuate in software — try 16384 (-6 dB) or 8192 (-12 dB) if your
+// listening device's input is clipping the PCM5102's 2 Vrms peak.
+#define MASTER_VOLUME_Q15           16384
 
 // ===== Reverb =====
 #define REVERB_ENABLED_DEFAULT      0

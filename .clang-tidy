@@ -1,0 +1,93 @@
+# clang-tidy config for Dummer.
+#
+# Run from the project root:
+#   clang-tidy -p .pio/build/debug src/audio/mixer.cpp ...
+#
+# (PlatformIO can generate compile_commands.json with `pio run -t compiledb`.)
+#
+# Embedded-friendly check set:
+#   * google-readability-casting       — flags C-style casts
+#   * modernize-*                      — use_nullptr, use_override, etc.
+#   * cppcoreguidelines-*              — strong type / lifetime advice
+#   * bugprone-*                       — common bug shapes
+#   * performance-*                    — copies & moves
+#   * readability-*                    — naming, magic numbers
+#
+# Disabled (noisy or impractical on bare-metal):
+#   * fuchsia-*, llvmlibc-*, abseil-*  — not relevant
+#   * cppcoreguidelines-avoid-magic-numbers / readability-magic-numbers
+#     — Q15 constants & DSP coefficients deliberately literal
+#   * cppcoreguidelines-pro-bounds-array-to-pointer-decay
+#     — unavoidable with C arrays in firmware
+#   * cppcoreguidelines-pro-type-vararg / hicpp-vararg
+#     — printf-style logging is intentional
+#   * modernize-use-trailing-return-type
+#     — stylistic preference, leading return type stays
+#   * readability-identifier-length
+#     — short i/n/v identifiers in tight loops are fine
+#   * modernize-deprecated-headers
+#     — <stdint.h> is fine, idiomatic for embedded; <cstdint> brings
+#       std:: namespacing complications with no benefit here
+#   * cppcoreguidelines-avoid-c-arrays / modernize-avoid-c-arrays /
+#     hicpp-avoid-c-arrays
+#     — fixed-size C arrays are intentional (no allocator, predictable layout)
+#   * cppcoreguidelines-pro-type-union-access — FreeRTOS / I2S structs use unions
+
+Checks: >
+  -*,
+  bugprone-*,
+  cppcoreguidelines-*,
+  google-readability-casting,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -modernize-use-trailing-return-type,
+  -readability-magic-numbers,
+  -readability-identifier-length,
+  -bugprone-easily-swappable-parameters,
+  -modernize-deprecated-headers,
+  -hicpp-deprecated-headers,
+  -cppcoreguidelines-avoid-c-arrays,
+  -modernize-avoid-c-arrays,
+  -hicpp-avoid-c-arrays,
+  -cppcoreguidelines-pro-type-union-access
+
+WarningsAsErrors: ''
+HeaderFilterRegex: '(src|include)/'
+FormatStyle: file
+
+CheckOptions:
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key: readability-identifier-naming.MethodCase
+    value: lower_case
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.PrivateMemberSuffix
+    value: _
+  - key: readability-identifier-naming.ConstexprVariableCase
+    value: CamelCase
+  - key: readability-identifier-naming.ConstexprVariablePrefix
+    value: k
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.GlobalConstantPrefix
+    value: k
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE

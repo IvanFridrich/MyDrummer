@@ -1,0 +1,24 @@
+# Based on Google C++ Style, adapted for the existing Dummer codebase:
+#   - 4-space indent (we already use this)
+#   - 100-col line limit (more room for DSP expressions)
+#   - keep short blocks on the same line where natural
+
+BasedOnStyle: Google
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+AccessModifierOffset: -2
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Always
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveDeclarations: Consecutive
+AlignTrailingComments: true
+BinPackParameters: false
+DerivePointerAlignment: false
+PointerAlignment: Left
+SortIncludes: Never
+SpaceBeforeCpp11BracedList: true
+Standard: c++17
