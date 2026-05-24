@@ -34,6 +34,22 @@ int16_t sat_i16(int32_t s) {
     return (int16_t)s;
 }
 
+// Mirrors the mixer's universal end-ramp: linear taper over the last
+// VOICE_END_RAMP_SAMPLES frames of a sample. Returns the voiced value
+// scaled by the ramp factor (or unchanged if outside the ramp window).
+int32_t apply_end_ramp(int32_t voiced, uint32_t position, uint32_t length) {
+#if ENABLE_END_RAMP
+    const uint32_t start = (length > VOICE_END_RAMP_SAMPLES)
+        ? length - (uint32_t)VOICE_END_RAMP_SAMPLES : 0;
+    if (position >= start) {
+        const int32_t samples_left = (int32_t)(length - position);
+        const int32_t ramp_q15     = samples_left << 9;
+        return (voiced * ramp_q15) >> 15;
+    }
+#endif
+    return voiced;
+}
+
 constexpr int16_t kRamp[]   = { 100, 200, 300, 400, 500, 600, 700, 800 };
 constexpr int16_t kSteady[] = { -100, -100, -100, -100, -100, -100, -100, -100 };
 constexpr int16_t kLoud[]   = { 30000, 30000, 30000, 30000 };
@@ -89,8 +105,12 @@ void test_single_voice_plays_through() {
     int16_t buf[8];
     mx.get_samples(buf, 8);
 
-    for (int i = 0; i < 8; ++i) {
-        TEST_ASSERT_EQUAL_INT16(mul_q15(kRamp[i], (int16_t)MASTER_VOLUME_Q15), buf[i]);
+    // kRamp is 8 frames — shorter than VOICE_END_RAMP_SAMPLES — so every
+    // sample is in the linear end-ramp window starting at position 0.
+    for (uint32_t i = 0; i < 8; ++i) {
+        const int32_t voiced = mul_q15(kRamp[i], (int16_t)MASTER_VOLUME_Q15);
+        const int32_t expected = apply_end_ramp(voiced, i, 8);
+        TEST_ASSERT_EQUAL_INT16(sat_i16(expected), buf[i]);
     }
 
     // After consuming all 8 samples, voice should deactivate on the next
@@ -112,10 +132,12 @@ void test_two_voices_sum() {
     int16_t buf[8];
     mx.get_samples(buf, 8);
 
-    for (int i = 0; i < 8; ++i) {
-        int32_t s = (int32_t)mul_q15(kRamp[i],   (int16_t)MASTER_VOLUME_Q15)
-                  + (int32_t)mul_q15(kSteady[i], (int16_t)MASTER_VOLUME_Q15);
-        TEST_ASSERT_EQUAL_INT16(sat_i16(s), buf[i]);
+    for (uint32_t i = 0; i < 8; ++i) {
+        const int32_t v1 = apply_end_ramp(
+            mul_q15(kRamp[i],   (int16_t)MASTER_VOLUME_Q15), i, 8);
+        const int32_t v2 = apply_end_ramp(
+            mul_q15(kSteady[i], (int16_t)MASTER_VOLUME_Q15), i, 8);
+        TEST_ASSERT_EQUAL_INT16(sat_i16(v1 + v2), buf[i]);
     }
 }
 
@@ -123,20 +145,23 @@ void test_saturating_clip_on_loud_sum() {
     VoicePool pool;
     Mixer mx(pool, kTable, kTableSize);
 
-    // Trigger two loud voices (different sample IDs so no retrigger fade) —
-    // sum should clip at int16 max.
+    // Trigger two loud voices (different sample IDs so no retrigger fade).
+    // Saturation behaviour is verified against the per-frame ramped sum —
+    // with MASTER_VOLUME_Q15 = 16384 and the end-ramp active on a 4-frame
+    // sample, the actual sum stays well within int16 range. sat_i16 makes
+    // the assertion robust to either path.
     pool.trigger(2);
     pool.trigger(3);
 
     int16_t buf[4];
     mx.get_samples(buf, 4);
 
-    for (int i = 0; i < 4; ++i) {
-        int32_t naive = 2 * (int32_t)mul_q15(kLoud[i], (int16_t)MASTER_VOLUME_Q15);
-        // At unity master volume this naive sum exceeds int16 range and the
-        // mixer must saturate. With software attenuation the sum may stay
-        // in range; either way, output matches the saturated naive value.
-        TEST_ASSERT_EQUAL_INT16(sat_i16(naive), buf[i]);
+    for (uint32_t i = 0; i < 4; ++i) {
+        const int32_t v1 = apply_end_ramp(
+            mul_q15(kLoud[i], (int16_t)MASTER_VOLUME_Q15), i, 4);
+        const int32_t v2 = apply_end_ramp(
+            mul_q15(kLoud[i], (int16_t)MASTER_VOLUME_Q15), i, 4);
+        TEST_ASSERT_EQUAL_INT16(sat_i16(v1 + v2), buf[i]);
     }
 }
 
@@ -148,15 +173,18 @@ void test_position_advances_across_chunks() {
 
     int16_t chunk1[3];
     mx.get_samples(chunk1, 3);
-    for (int i = 0; i < 3; ++i) {
-        TEST_ASSERT_EQUAL_INT16(mul_q15(kRamp[i], (int16_t)MASTER_VOLUME_Q15), chunk1[i]);
+    for (uint32_t i = 0; i < 3; ++i) {
+        const int32_t voiced = mul_q15(kRamp[i], (int16_t)MASTER_VOLUME_Q15);
+        TEST_ASSERT_EQUAL_INT16(sat_i16(apply_end_ramp(voiced, i, 8)), chunk1[i]);
     }
     TEST_ASSERT_EQUAL_UINT32(3, pool.voices()[0].position);
 
     int16_t chunk2[3];
     mx.get_samples(chunk2, 3);
-    for (int i = 0; i < 3; ++i) {
-        TEST_ASSERT_EQUAL_INT16(mul_q15(kRamp[3 + i], (int16_t)MASTER_VOLUME_Q15), chunk2[i]);
+    for (uint32_t i = 0; i < 3; ++i) {
+        const uint32_t pos = 3 + i;
+        const int32_t voiced = mul_q15(kRamp[pos], (int16_t)MASTER_VOLUME_Q15);
+        TEST_ASSERT_EQUAL_INT16(sat_i16(apply_end_ramp(voiced, pos, 8)), chunk2[i]);
     }
     TEST_ASSERT_EQUAL_UINT32(6, pool.voices()[0].position);
 }
@@ -174,6 +202,58 @@ void test_empty_descriptor_is_safe() {
 
     // Voice should have been deactivated by the mixer's guard.
     TEST_ASSERT_EQUAL_UINT16(0, pool.active_count());
+}
+
+void test_end_ramp_scales_last_window_linearly() {
+    // Long sample → end-ramp only fires for positions in
+    // [length - 64, length-1]; positions before that should be untouched.
+    VoicePool pool;
+    Mixer mx(pool, kTable, kTableSize);
+
+    pool.trigger(5);                                                 // kLong (length 2000)
+    Voice& v = pool.voices()[0];
+    v.position = (uint32_t)(2000 - VOICE_END_RAMP_SAMPLES);            // jump to ramp start
+
+    int16_t buf[VOICE_END_RAMP_SAMPLES];
+    mx.get_samples(buf, VOICE_END_RAMP_SAMPLES);
+
+    // First sample of the ramp window must equal the un-ramped value
+    // (samples_left = 64 → ramp_q15 = 32768 → factor 1.0). Last sample
+    // must be ~1/64 of the un-ramped value (samples_left = 1 → ramp_q15 = 512).
+    const int32_t full = mul_q15(1000, (int16_t)MASTER_VOLUME_Q15);
+
+    TEST_ASSERT_EQUAL_INT16(sat_i16(full), buf[0]);
+    TEST_ASSERT_EQUAL_INT16(sat_i16((full * 512) >> 15), buf[VOICE_END_RAMP_SAMPLES - 1]);
+
+    // Mid-ramp: at i = 32, samples_left = 32 → factor 0.5.
+    TEST_ASSERT_EQUAL_INT16(sat_i16((full * (32 << 9)) >> 15), buf[32]);
+
+    // Strictly decreasing through the ramp window.
+    for (int i = 1; i < VOICE_END_RAMP_SAMPLES; ++i) {
+        TEST_ASSERT_TRUE(buf[i] <= buf[i - 1]);
+    }
+
+    // One more chunk drives position past length → deactivation on next call.
+    int16_t drain[1];
+    mx.get_samples(drain, 1);
+    TEST_ASSERT_EQUAL_UINT16(0, pool.active_count());
+}
+
+void test_end_ramp_does_not_affect_positions_before_window() {
+    // At position 0 of a long sample, the end-ramp window is way ahead;
+    // output should match the un-ramped Q15 multiply exactly.
+    VoicePool pool;
+    Mixer mx(pool, kTable, kTableSize);
+
+    pool.trigger(5);  // kLong
+
+    int16_t buf[16];
+    mx.get_samples(buf, 16);
+
+    const int16_t expected = mul_q15(1000, (int16_t)MASTER_VOLUME_Q15);
+    for (int i = 0; i < 16; ++i) {
+        TEST_ASSERT_EQUAL_INT16(expected, buf[i]);
+    }
 }
 
 void test_retrigger_fade_decays_old_voice_gain() {
@@ -244,6 +324,8 @@ int main(int, char**) {
     RUN_TEST(test_saturating_clip_on_loud_sum);
     RUN_TEST(test_position_advances_across_chunks);
     RUN_TEST(test_empty_descriptor_is_safe);
+    RUN_TEST(test_end_ramp_scales_last_window_linearly);
+    RUN_TEST(test_end_ramp_does_not_affect_positions_before_window);
     RUN_TEST(test_retrigger_fade_decays_old_voice_gain);
     RUN_TEST(test_retrigger_fade_eventually_deactivates_old_voice);
     RUN_TEST(test_invalid_sample_id_is_safe);

@@ -26,7 +26,8 @@
 #define MAX_VOICES                  50
 #define ENABLE_RETRIGGER_DECAY      1
 #define RETRIGGER_FADE_K_Q15        32530    // ~0.99326 -> -60 dB in ~23 ms
-#define VOICE_END_RAMP_SAMPLES      64
+#define ENABLE_END_RAMP             1
+#define VOICE_END_RAMP_SAMPLES      64       // linear taper to zero on natural end
 
 // Per-voice trigger gain. Spec §2 calls for full-scale output (32767) with
 // the analog pot doing the volume work. Until the pot is wired, lower this
@@ -49,7 +50,7 @@
 // ===== Buttons =====
 #define BUTTON_COUNT                7
 #define BUTTON_PINS                 { 4, 12, 14, 23, 32, 33, 27 }
-#define BUTTON_DEBOUNCE_MS          50
+#define BUTTON_DEBOUNCE_MS          15
 #define BUTTON_LONGPRESS_MS         500
 #define BUTTON_ACTIVE_LOW           1
 
