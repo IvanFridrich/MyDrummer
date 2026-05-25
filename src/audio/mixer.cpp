@@ -1,10 +1,12 @@
 #include "mixer.hpp"
+#include "reverb.hpp"
 #include "voice.hpp"
 
 namespace dummer { namespace audio {
 
-Mixer::Mixer(VoicePool& pool, const SampleDescriptor* table, uint8_t table_size)
-    : pool_(&pool), table_(table), table_size_(table_size) {}
+Mixer::Mixer(VoicePool& pool, const SampleDescriptor* table, uint8_t table_size,
+             Reverb* reverb)
+    : pool_(&pool), table_(table), table_size_(table_size), reverb_(reverb) {}
 
 void Mixer::get_samples(int16_t* dst, size_t n) {
     constexpr size_t kMaxChunk = static_cast<size_t>(AUDIO_CHUNK);
@@ -56,6 +58,10 @@ void Mixer::get_samples(int16_t* dst, size_t n) {
             }
 #endif
         }
+    }
+
+    if (reverb_ != nullptr) {
+        reverb_->process_inplace(acc, n);
     }
 
     for (size_t i = 0; i < n; ++i) {

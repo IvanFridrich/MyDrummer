@@ -37,9 +37,9 @@
 
 // ===== Reverb =====
 #define REVERB_ENABLED_DEFAULT      0
-#define REVERB_WET_Q15              8192     // 0.25
+#define REVERB_WET_Q15              4096     // 0.125
 #define REVERB_COMB_DELAYS          { 1116, 1188, 1277, 1356 }
-#define REVERB_COMB_FEEDBACK_Q15    27525    // ~0.84
+#define REVERB_COMB_FEEDBACK_Q15    24576    // ~0.75
 #define REVERB_ALLPASS_DELAYS       { 556, 441 }
 #define REVERB_ALLPASS_COEF_Q15     22938    // ~0.7
 

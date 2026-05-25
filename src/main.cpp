@@ -24,6 +24,7 @@
 #include "control/led_manager.hpp"
 #include "audio/voice_pool.hpp"
 #include "audio/mixer.hpp"
+#include "audio/reverb.hpp"
 #include "samples.hpp"
 
 using ::dummer::hal::HalFactory;
@@ -35,6 +36,7 @@ using ::dummer::control::LedManager;
 using ::dummer::control::LedId;
 using ::dummer::audio::VoicePool;
 using ::dummer::audio::Mixer;
+using ::dummer::audio::Reverb;
 using ::dummer::audio::SampleId;
 using ::dummer::audio::kSampleTable;
 using ::dummer::audio::SAMPLE_COUNT;
@@ -46,6 +48,7 @@ ButtonManager* g_buttons = nullptr;
 LedManager*    g_leds    = nullptr;
 VoicePool*     g_pool    = nullptr;
 Mixer*         g_mixer   = nullptr;
+Reverb*        g_reverb  = nullptr;
 
 constexpr uint8_t INVALID_SAMPLE = 0xFF;
 
@@ -90,10 +93,18 @@ void app_task(void*) {
                   event_name(ev.type), static_cast<unsigned>(ev.index),
                   g_buttons->pin_of(ev.index));
             if (ev.type == ButtonEventType::Press) {
-                const uint8_t sid = drum_sample_for(ev.index);
-                if (sid != INVALID_SAMPLE) {
-                    g_pool->trigger(sid);
-                    g_leds->flash(led_for_button(ev.index));
+                if (static_cast<ButtonRole>(ev.index) == ButtonRole::ReverbToggle) {
+                    const bool now_on = !g_reverb->enabled();
+                    if (now_on) g_reverb->reset();
+                    g_reverb->set_enabled(now_on);
+                    g_leds->set_steady(LedId::Reverb, now_on);
+                    LOG_I("REVERB", "%s", now_on ? "ON" : "OFF");
+                } else {
+                    const uint8_t sid = drum_sample_for(ev.index);
+                    if (sid != INVALID_SAMPLE) {
+                        g_pool->trigger(sid);
+                        g_leds->flash(led_for_button(ev.index));
+                    }
                 }
             }
         }
@@ -139,12 +150,14 @@ void setup() {
     static ButtonManager bm(g_hal->gpio, g_hal->clock);
     static LedManager    lm(g_hal->gpio, g_hal->clock);
     static VoicePool     vp;
-    static Mixer         mx(vp, kSampleTable, static_cast<uint8_t>(SAMPLE_COUNT));
+    static Reverb        rv;
+    static Mixer         mx(vp, kSampleTable, static_cast<uint8_t>(SAMPLE_COUNT), &rv);
 
     g_buttons = &bm;
     g_leds    = &lm;
     g_pool    = &vp;
     g_mixer   = &mx;
+    g_reverb  = &rv;
 
     g_buttons->begin();
     g_leds->begin();
