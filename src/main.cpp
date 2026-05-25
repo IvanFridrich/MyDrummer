@@ -1,8 +1,10 @@
-// Milestone 2: WAV pipeline + Voice + VoicePool + Mixer, audio driven over
-// I2S to the PCM5102. Drum buttons (kick / snare / hihat) trigger samples;
-// reverb / looper / autodrum buttons stay inert until later milestones.
+// Milestone 5: Looper FSM wired end-to-end.
+// Drum buttons trigger samples + feed the looper recorder.
+// Btn5 (Looper): short = arm/record/play/stop; long = clear.
+// Recorded events play back on loop; each playback trigger flashes the
+// matching drum LED and the blue LoopDrum LED.
 //
-// Super-loop (spec §4): poll buttons → tick LEDs → (scheduler later) →
+// Super-loop (spec §4): poll buttons → tick LEDs → tick scheduler →
 // drain staging to I2S (non-blocking) → if staging empty, pull a fresh
 // chunk from the mixer.
 #ifdef BUILD_ESP32
@@ -25,6 +27,7 @@
 #include "audio/voice_pool.hpp"
 #include "audio/mixer.hpp"
 #include "audio/reverb.hpp"
+#include "audio/looper.hpp"
 #include "samples.hpp"
 
 using ::dummer::hal::HalFactory;
@@ -37,6 +40,7 @@ using ::dummer::control::LedId;
 using ::dummer::audio::VoicePool;
 using ::dummer::audio::Mixer;
 using ::dummer::audio::Reverb;
+using ::dummer::audio::Looper;
 using ::dummer::audio::SampleId;
 using ::dummer::audio::kSampleTable;
 using ::dummer::audio::SAMPLE_COUNT;
@@ -49,6 +53,7 @@ LedManager*    g_leds    = nullptr;
 VoicePool*     g_pool    = nullptr;
 Mixer*         g_mixer   = nullptr;
 Reverb*        g_reverb  = nullptr;
+Looper*        g_looper  = nullptr;
 
 constexpr uint8_t INVALID_SAMPLE = 0xFF;
 
@@ -79,6 +84,15 @@ LedId led_for_button(uint8_t idx) {
     }
 }
 
+LedId led_for_sample(uint8_t sid) {
+    switch (static_cast<SampleId>(sid)) {
+        case SampleId::SAMPLE_KICK:       return LedId::Kick;
+        case SampleId::SAMPLE_SNARE:      return LedId::Snare;
+        case SampleId::SAMPLE_HIHAT_OPEN: return LedId::Hihat;
+        default:                          return LedId::LoopDrum;
+    }
+}
+
 void app_task(void*) {
     static int16_t staging[AUDIO_CHUNK];
     size_t staging_head  = 0;
@@ -99,12 +113,19 @@ void app_task(void*) {
                     g_reverb->set_enabled(now_on);
                     g_leds->set_steady(LedId::Reverb, now_on);
                     LOG_I("REVERB", "%s", now_on ? "ON" : "OFF");
+                } else if (static_cast<ButtonRole>(ev.index) == ButtonRole::Looper) {
+                    g_looper->on_button_short();
                 } else {
                     const uint8_t sid = drum_sample_for(ev.index);
                     if (sid != INVALID_SAMPLE) {
                         g_pool->trigger(sid);
                         g_leds->flash(led_for_button(ev.index));
+                        g_looper->on_drum_hit(sid);
                     }
+                }
+            } else if (ev.type == ButtonEventType::LongPress) {
+                if (static_cast<ButtonRole>(ev.index) == ButtonRole::Looper) {
+                    g_looper->on_button_long();
                 }
             }
         }
@@ -112,7 +133,17 @@ void app_task(void*) {
         // 2. LED timers / heartbeat.
         g_leds->tick();
 
-        // 3. (milestone 5/6: looper + auto-drummer scheduler ticks here)
+        // 3. Tick scheduler — emit looper playback triggers.
+        {
+            constexpr size_t kMaxTrig = 8;
+            uint8_t trig[kMaxTrig];
+            const size_t fired = g_looper->tick(AUDIO_CHUNK, trig, kMaxTrig);
+            for (size_t i = 0; i < fired; ++i) {
+                g_pool->trigger(trig[i]);
+                g_leds->flash(led_for_sample(trig[i]));
+                g_leds->flash(LedId::LoopDrum);
+            }
+        }
 
         // 4. Non-blocking drain of staging buffer into I2S DMA.
         if (staging_count > 0) {
@@ -141,7 +172,7 @@ void setup() {
     g_hal = HalFactory::create();
     g_hal->serial->init(115200);
     ::dummer::log::set_sink(g_hal->serial);
-    LOG_I("BOOT", "Dummer milestone 2 — audio engine up");
+    LOG_I("BOOT", "Dummer milestone 5 — looper active");
 
     if (!g_hal->i2s->init(SAMPLE_RATE, I2S_BCLK, I2S_LRCK, I2S_DOUT)) {
         LOG_E("BOOT", "I2S init failed");
@@ -152,12 +183,14 @@ void setup() {
     static VoicePool     vp;
     static Reverb        rv;
     static Mixer         mx(vp, kSampleTable, static_cast<uint8_t>(SAMPLE_COUNT), &rv);
+    static Looper        lo;
 
     g_buttons = &bm;
     g_leds    = &lm;
     g_pool    = &vp;
     g_mixer   = &mx;
     g_reverb  = &rv;
+    g_looper  = &lo;
 
     g_buttons->begin();
     g_leds->begin();
