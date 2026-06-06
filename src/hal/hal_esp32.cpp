@@ -30,6 +30,17 @@ class Esp32Gpio : public IGpio {
     void write(int pin, bool value) override { digitalWrite(pin, value ? HIGH : LOW); }
 };
 
+// PCM5102: 32-bit stereo slots, mono audio mirrored L=R.
+// XOR sign bit so silence maps to 0x8000_0000 (offset binary expected by DAC).
+static void to_i2s_frames(const int16_t* src, size_t n, uint32_t* dst) {
+    for (size_t i = 0; i < n; ++i) {
+        const uint32_t frame =
+            static_cast<uint32_t>(static_cast<uint16_t>(src[i] ^ 0x8000u)) << 16;
+        dst[2 * i + 0] = frame;
+        dst[2 * i + 1] = frame;
+    }
+}
+
 class Esp32I2s : public II2s {
   public:
     bool init(int sample_rate, int bclk, int lrck, int dout) override {
@@ -60,33 +71,30 @@ class Esp32I2s : public II2s {
     }
 
     size_t write_nonblocking(const int16_t* buf, size_t samples) override {
-        // PCM5102 wants 32-bit slots with 16-bit data left-shifted into the
-        // upper bits. Same sample on both channels (mono).
-        //
-        // One i2s_write per chunk — per-sample calls cost ~50 us of
-        // FreeRTOS-lock overhead each and quickly starve the DMA ring.
-        constexpr size_t kMaxSamples = static_cast<size_t>(AUDIO_CHUNK);
-        if (samples > kMaxSamples) samples = kMaxSamples;
+        if (samples > static_cast<size_t>(I2S_DMA_BUF_LEN))
+            samples = static_cast<size_t>(I2S_DMA_BUF_LEN);
 
-        uint32_t frames[AUDIO_CHUNK * 2];   // [L,R,L,R,...]
-        for (size_t i = 0; i < samples; ++i) {
-            // Offset binary: XOR the sign bit so silence maps to 0x8000_0000
-            // rather than 0x0000_0000. Two's complement and offset binary differ
-            // only in the MSB; this is what the PCM5102 expects in some wiring
-            // configs when the ESP32 driver sends unsigned data words.
-            const auto unsigned_sample =
-                static_cast<uint16_t>(static_cast<uint16_t>(buf[i]) ^ 0x8000u);
-            const uint32_t frame = static_cast<uint32_t>(unsigned_sample) << 16;
-            frames[2 * i + 0] = frame;
-            frames[2 * i + 1] = frame;
-        }
+        uint32_t frames[I2S_DMA_BUF_LEN * 2];
+        to_i2s_frames(buf, samples, frames);
 
         size_t bytes_written = 0;
-        const size_t bytes_to_write = samples * 2 * sizeof(uint32_t);
-        const esp_err_t err = i2s_write(I2S_NUM, frames, bytes_to_write,
+        const esp_err_t err = i2s_write(I2S_NUM, frames,
+                                        samples * 2 * sizeof(uint32_t),
                                         &bytes_written, /*ticks_to_wait=*/0);
         if (err != ESP_OK) return 0;
         return bytes_written / (2 * sizeof(uint32_t));
+    }
+
+    void write(const int16_t* buf, size_t samples) override {
+        if (samples > static_cast<size_t>(I2S_DMA_BUF_LEN))
+            samples = static_cast<size_t>(I2S_DMA_BUF_LEN);
+
+        uint32_t frames[I2S_DMA_BUF_LEN * 2];
+        to_i2s_frames(buf, samples, frames);
+
+        size_t bytes_written = 0;
+        i2s_write(I2S_NUM, frames, samples * 2 * sizeof(uint32_t),
+                  &bytes_written, portMAX_DELAY);
     }
 };
 

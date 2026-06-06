@@ -6,7 +6,7 @@ VoicePool::VoicePool() : next_seq_(0) {
     for (uint16_t i = 0; i < CAPACITY; ++i) voices_[i].deactivate();
 }
 
-void VoicePool::trigger(uint8_t sample_id) {
+void VoicePool::trigger(uint8_t sample_id, uint8_t velocity) {
     // 1. Retrigger fade-out: mark any active voice for the same sample so the
     //    mixer exponentially decays its gain to silence. A fresh voice is then
     //    allocated below so the new hit starts cleanly at full gain.
@@ -35,7 +35,9 @@ void VoicePool::trigger(uint8_t sample_id) {
         }
     }
     voices_[slot].start(sample_id, ++next_seq_);
-    voices_[slot].gain_q15 = static_cast<int16_t>(MASTER_VOLUME_Q15);
+    if (velocity > 127) velocity = 127;
+    const int32_t gain = (static_cast<int32_t>(MASTER_VOLUME_Q15) * velocity) / 127;
+    voices_[slot].gain_q15 = static_cast<int16_t>(gain);
 }
 
 uint16_t VoicePool::active_count() const {

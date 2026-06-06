@@ -1,12 +1,12 @@
-// Milestone 5: Looper FSM wired end-to-end.
-// Drum buttons trigger samples + feed the looper recorder.
-// Btn5 (Looper): short = arm/record/play/stop; long = clear.
-// Recorded events play back on loop; each playback trigger flashes the
-// matching drum LED and the blue LoopDrum LED.
+// Milestone 6: AutoDrummer wired end-to-end.
+// Btn4 (Looper): short = arm/record/play/stop; long = clear.
+// Btn5 (AutoStyle): short = cycle style; long = stop auto-drummer.
+// Btn6 (AutoSpeed): short = cycle BPM; long = reset to normal speed.
+// Looper and AutoDrummer are mutually exclusive: starting one stops the other.
 //
-// Super-loop (spec §4): poll buttons → tick LEDs → tick scheduler →
-// drain staging to I2S (non-blocking) → if staging empty, pull a fresh
-// chunk from the mixer.
+// Audio loop: poll buttons → tick LEDs → 2×(tick scheduler + mix AUDIO_CHUNK)
+// → blocking I2S write of full I2S_DMA_BUF_LEN buffer (portMAX_DELAY).
+// Loop profiler logs max/avg CPU time per second to serial.
 #ifdef BUILD_ESP32
 
 // Framework headers use old-style casts; silence the warning for the include
@@ -28,6 +28,7 @@
 #include "audio/mixer.hpp"
 #include "audio/reverb.hpp"
 #include "audio/looper.hpp"
+#include "audio/auto_drummer.hpp"
 #include "samples.hpp"
 
 using ::dummer::hal::HalFactory;
@@ -41,6 +42,8 @@ using ::dummer::audio::VoicePool;
 using ::dummer::audio::Mixer;
 using ::dummer::audio::Reverb;
 using ::dummer::audio::Looper;
+using ::dummer::audio::AutoDrummer;
+using ::dummer::audio::AutoStyle;
 using ::dummer::audio::SampleId;
 using ::dummer::audio::kSampleTable;
 using ::dummer::audio::SAMPLE_COUNT;
@@ -54,8 +57,29 @@ VoicePool*     g_pool    = nullptr;
 Mixer*         g_mixer   = nullptr;
 Reverb*        g_reverb  = nullptr;
 Looper*        g_looper  = nullptr;
+AutoDrummer*   g_auto    = nullptr;
 
 constexpr uint8_t INVALID_SAMPLE = 0xFF;
+
+[[maybe_unused]] static const char* style_name(AutoStyle s) {
+    switch (s) {
+        case AutoStyle::Blues:    return "Blues";
+        case AutoStyle::Jazz:     return "Jazz";
+        case AutoStyle::Funk:     return "Funk";
+        case AutoStyle::Reggae:   return "Reggae";
+        case AutoStyle::Gospel:   return "Gospel";
+        case AutoStyle::HardRock: return "HardRock";
+        default:                  return "Off";
+    }
+}
+
+[[maybe_unused]] static const char* speed_name(uint8_t idx) {
+    switch (idx) {
+        case 0:  return "slow";
+        case 2:  return "fast";
+        default: return "normal";
+    }
+}
 
 [[maybe_unused]] const char* event_name(ButtonEventType t) {
     switch (t) {
@@ -86,19 +110,32 @@ LedId led_for_button(uint8_t idx) {
 
 LedId led_for_sample(uint8_t sid) {
     switch (static_cast<SampleId>(sid)) {
-        case SampleId::SAMPLE_KICK:       return LedId::Kick;
-        case SampleId::SAMPLE_SNARE:      return LedId::Snare;
-        case SampleId::SAMPLE_HIHAT_OPEN: return LedId::Hihat;
-        default:                          return LedId::LoopDrum;
+        case SampleId::SAMPLE_KICK:          return LedId::Kick;
+        case SampleId::SAMPLE_STICKS:        return LedId::Kick;
+        case SampleId::SAMPLE_SNARE:         return LedId::Snare;
+        case SampleId::SAMPLE_TOM_HI:        return LedId::Snare;
+        case SampleId::SAMPLE_TOM_MID:       return LedId::Snare;
+        case SampleId::SAMPLE_TOM_LO:        return LedId::Snare;
+        case SampleId::SAMPLE_HIHAT_CLOSED:  return LedId::Hihat;
+        case SampleId::SAMPLE_HIHAT_OPEN:    return LedId::Hihat;
+        case SampleId::SAMPLE_HIHAT_PEDAL:   return LedId::Hihat;
+        case SampleId::SAMPLE_CRASH:         return LedId::Hihat;
+        case SampleId::SAMPLE_RIDE:          return LedId::Hihat;
+        default:                             return LedId::LoopDrum;
     }
 }
 
 void app_task(void*) {
-    static int16_t staging[AUDIO_CHUNK];
-    size_t staging_head  = 0;
-    size_t staging_count = 0;
+    static int16_t buf[I2S_DMA_BUF_LEN];   // one DMA-slot-sized output buffer
+
+    uint32_t loop_max_us = 0;
+    uint64_t loop_total  = 0;
+    uint32_t loop_n      = 0;
+    uint32_t last_log_ms = 0;
 
     for (;;) {
+        const uint64_t t0 = g_hal->clock->micros();
+
         // 1. Drain all queued button events this iteration.
         for (;;) {
             ButtonEvent ev = g_buttons->poll();
@@ -107,14 +144,29 @@ void app_task(void*) {
                   event_name(ev.type), static_cast<unsigned>(ev.index),
                   g_buttons->pin_of(ev.index));
             if (ev.type == ButtonEventType::Press) {
-                if (static_cast<ButtonRole>(ev.index) == ButtonRole::ReverbToggle) {
+                const auto role = static_cast<ButtonRole>(ev.index);
+                if (role == ButtonRole::ReverbToggle) {
                     const bool now_on = !g_reverb->enabled();
                     if (now_on) g_reverb->reset();
                     g_reverb->set_enabled(now_on);
                     g_leds->set_steady(LedId::Reverb, now_on);
                     LOG_I("REVERB", "%s", now_on ? "ON" : "OFF");
-                } else if (static_cast<ButtonRole>(ev.index) == ButtonRole::Looper) {
+                } else if (role == ButtonRole::Looper) {
+                    if (g_auto->active()) {
+                        g_auto->stop();
+                        g_leds->set_steady(LedId::LoopDrum, false);
+                    }
                     g_looper->on_button_short();
+                } else if (role == ButtonRole::AutoDrumStyle) {
+                    g_looper->stop();
+                    g_auto->next_style();
+                    g_leds->set_steady(LedId::LoopDrum, g_auto->active());
+                    LOG_I("AUTO", "style=%s speed=%s",
+                          style_name(g_auto->style()),
+                          speed_name(g_auto->speed()));
+                } else if (role == ButtonRole::AutoDrumSpeed) {
+                    g_auto->next_speed();
+                    LOG_I("AUTO", "speed=%s", speed_name(g_auto->speed()));
                 } else {
                     const uint8_t sid = drum_sample_for(ev.index);
                     if (sid != INVALID_SAMPLE) {
@@ -124,45 +176,64 @@ void app_task(void*) {
                     }
                 }
             } else if (ev.type == ButtonEventType::LongPress) {
-                if (static_cast<ButtonRole>(ev.index) == ButtonRole::Looper) {
+                const auto role = static_cast<ButtonRole>(ev.index);
+                if (role == ButtonRole::Looper) {
                     g_looper->on_button_long();
+                } else if (role == ButtonRole::AutoDrumStyle) {
+                    g_auto->stop();
+                    g_leds->set_steady(LedId::LoopDrum, false);
+                    LOG_I("AUTO", "stopped");
+                } else if (role == ButtonRole::AutoDrumSpeed) {
+                    while (g_auto->speed() != 1) g_auto->next_speed();
+                    LOG_I("AUTO", "speed reset to normal");
                 }
             }
         }
 
-        // 2. LED timers / heartbeat.
+        // 2. LED timers.
         g_leds->tick();
 
-        // 3. Tick scheduler — emit looper playback triggers.
-        {
-            constexpr size_t kMaxTrig = 8;
+        // 3+5. Two AUDIO_CHUNK halves → fill the full DMA buffer.
+        //      Scheduler and mixer are ticked per half so event timing stays
+        //      accurate at AUDIO_CHUNK granularity.
+        constexpr size_t kMaxTrig = 16;
+        for (int half = 0; half < 2; ++half) {
             uint8_t trig[kMaxTrig];
-            const size_t fired = g_looper->tick(AUDIO_CHUNK, trig, kMaxTrig);
+            uint8_t vel[kMaxTrig];
+            // Looper wins when active; its live hits play at full velocity.
+            // Auto-drummer supplies per-hit (humanized) velocities.
+            size_t fired = g_looper->tick(AUDIO_CHUNK, trig, kMaxTrig);
+            const bool from_auto = (fired == 0);
+            if (from_auto) fired = g_auto->tick(AUDIO_CHUNK, trig, vel, kMaxTrig);
             for (size_t i = 0; i < fired; ++i) {
-                g_pool->trigger(trig[i]);
+                g_pool->trigger(trig[i], from_auto ? vel[i] : static_cast<uint8_t>(127));
                 g_leds->flash(led_for_sample(trig[i]));
                 g_leds->flash(LedId::LoopDrum);
             }
+            g_mixer->get_samples(buf + half * AUDIO_CHUNK, AUDIO_CHUNK);
         }
 
-        // 4. Non-blocking drain of staging buffer into I2S DMA.
-        if (staging_count > 0) {
-            size_t written = g_hal->i2s->write_nonblocking(
-                staging + staging_head, staging_count);
-            staging_head  += written;
-            staging_count -= written;
+        // Profiler: measure CPU work before the blocking write.
+        const uint32_t dt = static_cast<uint32_t>(g_hal->clock->micros() - t0);
+        if (dt > loop_max_us) loop_max_us = dt;
+        loop_total += dt;
+        ++loop_n;
+        if (dt > PROFILER_WARN_THRESHOLD_US)
+            LOG_W("LOOP", "slow iteration %u us", static_cast<unsigned>(dt));
+
+        const uint32_t now_ms = g_hal->clock->millis();
+        if (now_ms - last_log_ms >= PROFILER_LOG_INTERVAL_MS) {
+            LOG_I("LOOP", "cpu max=%u avg=%u us  n=%u",
+                  static_cast<unsigned>(loop_max_us),
+                  static_cast<unsigned>(loop_total / loop_n),
+                  static_cast<unsigned>(loop_n));
+            loop_max_us = 0; loop_total = 0; loop_n = 0;
+            last_log_ms = now_ms;
         }
 
-        // 5. Refill staging if empty.
-        if (staging_count == 0) {
-            g_mixer->get_samples(staging, AUDIO_CHUNK);
-            staging_head  = 0;
-            staging_count = AUDIO_CHUNK;
-        }
-
-        // 6. Yield 1 ms — IDLE / WDT keep healthy. Buttons still polled
-        //    every iteration. DMA holds ~11 ms of audio so this is safe.
-        vTaskDelay(1);
+        // 4. Blocking write — yields to RTOS until DMA accepts the full buffer.
+        //    No vTaskDelay needed; write() blocks internally via portMAX_DELAY.
+        g_hal->i2s->write(buf, I2S_DMA_BUF_LEN);
     }
 }
 
@@ -172,7 +243,10 @@ void setup() {
     g_hal = HalFactory::create();
     g_hal->serial->init(115200);
     ::dummer::log::set_sink(g_hal->serial);
-    LOG_I("BOOT", "Dummer milestone 5 — looper active");
+    LOG_I("BOOT", "sr=%d chunk=%d dma=%dx%d buf=%d ms",
+          SAMPLE_RATE, AUDIO_CHUNK,
+          I2S_DMA_BUF_COUNT, I2S_DMA_BUF_LEN,
+          1000 * I2S_DMA_BUF_COUNT * I2S_DMA_BUF_LEN / SAMPLE_RATE);
 
     if (!g_hal->i2s->init(SAMPLE_RATE, I2S_BCLK, I2S_LRCK, I2S_DOUT)) {
         LOG_E("BOOT", "I2S init failed");
@@ -184,6 +258,7 @@ void setup() {
     static Reverb        rv;
     static Mixer         mx(vp, kSampleTable, static_cast<uint8_t>(SAMPLE_COUNT), &rv);
     static Looper        lo;
+    static AutoDrummer   ad;
 
     g_buttons = &bm;
     g_leds    = &lm;
@@ -191,6 +266,7 @@ void setup() {
     g_mixer   = &mx;
     g_reverb  = &rv;
     g_looper  = &lo;
+    g_auto    = &ad;
 
     g_buttons->begin();
     g_leds->begin();

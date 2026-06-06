@@ -20,8 +20,9 @@ class VoicePool {
     VoicePool();
 
     // Start a new voice on the given sample. Allocates a free slot or
-    // steals the oldest active voice if the pool is full.
-    void trigger(uint8_t sample_id);
+    // steals the oldest active voice if the pool is full. `velocity` (1-127)
+    // scales the trigger gain off MASTER_VOLUME_Q15; 127 = full master level.
+    void trigger(uint8_t sample_id, uint8_t velocity = 127);
 
     // Direct access — the mixer iterates the array each chunk.
     Voice*       voices()       { return voices_; }

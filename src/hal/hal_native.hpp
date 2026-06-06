@@ -35,6 +35,7 @@ class NativeI2s : public II2s {
   public:
     bool   init(int sample_rate, int bclk, int lrck, int dout) override;
     size_t write_nonblocking(const int16_t* buf, size_t samples) override;
+    void   write(const int16_t* buf, size_t samples) override;
 
     // --- test helpers ---
     const std::vector<int16_t>& captured() const { return captured_; }

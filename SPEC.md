@@ -63,7 +63,7 @@ A standalone hardware drum machine on ESP32 DevKitC with external I2S DAC. Plays
 ### Scripts (Windows `.bat`)
 Located in `scripts/`. Wrappers over PlatformIO commands:
 
-- `build_all.bat` — runs `wav_to_cpp.py` + `midi_to_cpp.py`, then builds release + debug + native_test, then runs unit tests. Fails fast.
+- `build_all.bat` — runs `gen_patterns.py` + `wav_to_cpp.py` + `midi_to_cpp.py`, then builds release + debug + native_test, then runs unit tests. Fails fast.
 - `build_release.bat`
 - `build_debug.bat`
 - `test.bat`
@@ -228,29 +228,41 @@ Manual drumming during Recording or Playing is allowed and audible. Manual hits 
 
 ### Patterns
 - Standard MIDI File format 0, channel 10, GM drum map.
-- Built-in: `blues`, `hardrock`, `reggae`, `funk`, `country`, `metronome`.
+- Built-in: `blues`, `jazz`, `funk`, `reggae`, `gospel`, `hardrock`.
 - Stored as `static constexpr uint8_t[]` SMF blobs in `generated/patterns.cpp`, emitted by `scripts/midi_to_cpp.py`.
 - Sample mapping (GM note → internal sample): kick=35/36, snare=38/40, hihat closed=42, hihat open=46, ride=51, crash=49, tom=45/47/48/50, cowbell=56, sticks=31.
+
+### Pattern structure (improv-friendly design)
+Each `.mid` file follows the same structure:
+- **Bar 0**: Count-in — 4 stick clicks on quarter notes (plays once).
+- **Bars 1–N**: Intro — more elaborate arrangement to set the mood (plays once).
+- **[LOOP_START meta marker]**
+- **Main loop**: Simple, steady groove designed to support improvisation.
+  - Blues / Jazz: **12-bar** form with crash accents on chord changes (IV at bar 5, V at bar 9, turnaround fill at bar 12) so musicians always know where they are.
+  - Funk / Reggae: **4-bar** vamp — crash/fill at bar 4 marks the restart.
+  - Gospel / Hardrock: **8-bar** — crash on bar 1 and bar 5, fill on bar 8.
+- Main-loop groove is kept intentionally simple so it supports improvisation without distracting.
+- Fills and crashes at phrase boundaries signal the structure to the improviser.
 
 ### Speed per style
 - Three BPM presets per style (slow / normal / fast):
 
-| Style | Slow | Normal | Fast |
-|-------|------|--------|------|
-| Blues | 70 | 90 | 110 |
-| Hardrock | 100 | 120 | 140 |
-| Reggae | 65 | 80 | 95 |
-| Funk | 90 | 105 | 125 |
-| Country | 90 | 110 | 130 |
-| Metronome | 60 | 100 | 160 |
+| Style    | Slow | Normal | Fast |
+|----------|------|--------|------|
+| Blues    |  70  |   90   | 110  |
+| Jazz     |  80  |  120   | 160  |
+| Funk     |  80  |  100   | 120  |
+| Reggae   |  65  |   80   |  95  |
+| Gospel   |  70  |   90   | 110  |
+| Hardrock | 100  |  120   | 140  |
 
 - Speed setting persists across style changes (so cycling style at "fast" stays fast for the next style too).
 
 ### Control
-- **btn6 short press** — cycle: `off → blues → hardrock → reggae → funk → country → metronome → off`.
+- **btn6 short press** — cycle: `off → blues → jazz → funk → reggae → gospel → hardrock → off`.
 - **btn7 short press** — cycle: `slow → normal → fast → slow` for the current style.
 - **btn6 long press** — stop immediately.
-- Entering a style: 1 bar of count-in (single beat per quarter using the metronome click), then the pattern loops.
+- Entering a style: count-in bar (sticks) is embedded in the MIDI file and plays once before the loop.
 - Changing style while playing: finishes the current bar then switches at the next downbeat.
 - Changing speed while playing: takes effect at the next downbeat.
 
@@ -259,7 +271,39 @@ Manual drumming during Recording or Playing is allowed and audible. Manual hits 
 
 ---
 
-## 10. Logging
+## 10. Humanization
+
+Makes auto-drummer and looper playback feel less mechanical by adding small
+random deviations to timing and velocity on every triggered event.
+
+### Timing jitter
+- Each event gets a signed random offset drawn uniformly from
+  `[-HUMANIZE_TIMING_MAX, +HUMANIZE_TIMING_MAX]` samples.
+- `HUMANIZE_TIMING_MAX = 220` (≈ 5 ms at 44 100 Hz). Adjustable via define.
+- Positive offset delays the hit; negative fires it slightly early.
+- Result is clamped so no event fires before the current loop start.
+
+### Velocity variation
+- Each event's base velocity gets ±`HUMANIZE_VELOCITY_MAX` random variation.
+- `HUMANIZE_VELOCITY_MAX = 8` (out of 127). Adjustable via define.
+- Result is clamped to [1, 127].
+
+### PRNG
+- 16-bit Galois LFSR, seeded from `esp_random()` on ESP32 and from a fixed
+  constant in `BUILD_NATIVE_TEST` (so unit tests stay deterministic).
+- One advance per triggered event; stored as a field inside `AutoDrummer`
+  and `Looper` respectively.
+
+### Toggle
+- `HUMANIZE_ENABLED = 1` by default.
+- Set to `0` to disable (deterministic mode for tests and debugging).
+
+### Does not apply to
+- Manual drum button presses (those are already human).
+
+---
+
+## 11. Logging
 
 - `LOG_E(tag, fmt, ...)`, `LOG_W(tag, fmt, ...)`, `LOG_I(tag, fmt, ...)`.
 - `tag` is a short module name string (`"MIXER"`, `"LOOPER"`, etc.).
@@ -268,7 +312,7 @@ Manual drumming during Recording or Playing is allowed and audible. Manual hits 
 
 ---
 
-## 11. Loop profiler
+## 12. Loop profiler
 
 - Active in debug only (compiled out in release).
 - Tracks iteration time (`esp_timer_get_time()`).
@@ -277,7 +321,7 @@ Manual drumming during Recording or Playing is allowed and audible. Manual hits 
 
 ---
 
-## 12. HAL interfaces
+## 13. HAL interfaces
 
 `include/hal/hal.hpp` declares:
 
@@ -321,7 +365,7 @@ No `IAdc` — volume is analog hardware only.
 
 ---
 
-## 13. `defines.hpp` — central config
+## 14. `defines.hpp` — central config
 
 ```cpp
 // ===== Audio =====
@@ -379,11 +423,16 @@ enum class ButtonRole {
 
 // ===== Auto-drummer BPMs =====  (slow / normal / fast)
 #define BPM_BLUES        { 70,  90, 110 }
-#define BPM_HARDROCK     {100, 120, 140 }
+#define BPM_JAZZ         { 80, 120, 160 }
+#define BPM_FUNK         { 80, 100, 120 }
 #define BPM_REGGAE       { 65,  80,  95 }
-#define BPM_FUNK         { 90, 105, 125 }
-#define BPM_COUNTRY      { 90, 110, 130 }
-#define BPM_METRONOME    { 60, 100, 160 }
+#define BPM_GOSPEL       { 70,  90, 110 }
+#define BPM_HARDROCK     {100, 120, 140 }
+
+// ===== Humanization =====
+#define HUMANIZE_ENABLED         1
+#define HUMANIZE_TIMING_MAX      220    // samples (≈5 ms at 44100 Hz)
+#define HUMANIZE_VELOCITY_MAX    8      // ± out of 127
 
 // ===== Profiler =====
 #define PROFILER_LOG_INTERVAL_MS    1000
@@ -392,7 +441,7 @@ enum class ButtonRole {
 
 ---
 
-## 14. File layout
+## 15. File layout
 
 ```
 Dummer/
@@ -408,7 +457,8 @@ Dummer/
 │   ├── flash.bat
 │   ├── monitor.bat
 │   ├── wav_to_cpp.py
-│   └── midi_to_cpp.py
+│   ├── midi_to_cpp.py
+│   └── gen_patterns.py
 ├── assets/
 │   ├── samples/                  # USER drops 16-bit mono 44.1 kHz WAVs here
 │   │   ├── kick.wav
@@ -465,7 +515,7 @@ Dummer/
 
 ---
 
-## 15. `platformio.ini` outline
+## 16. `platformio.ini` outline
 
 ```ini
 [platformio]
@@ -498,7 +548,7 @@ build_flags = ${env.build_flags} -DBUILD_NATIVE_TEST -DLOG_LEVEL=3
 
 ---
 
-## 16. Workflow
+## 17. Workflow
 
 1. **Every change** to source code → run `build_all.bat`. All three builds must pass and all unit tests must be green before reporting work as done.
 2. **Frequent commits** — small, focused.
@@ -508,7 +558,7 @@ build_flags = ${env.build_flags} -DBUILD_NATIVE_TEST -DLOG_LEVEL=3
 
 ---
 
-## 17. Open items the user still needs to provide
+## 18. Open items the user still needs to provide
 
 1. **5 LED GPIO pins** — fill into `LED_*_PIN` in `defines.hpp`.
 2. **WAV samples** in `assets/samples/` — 16-bit mono 44.1 kHz, names per file layout above.
@@ -516,14 +566,15 @@ build_flags = ${env.build_flags} -DBUILD_NATIVE_TEST -DLOG_LEVEL=3
 
 ---
 
-## 18. First milestones (suggested ordering, each ends with a check-in)
+## 19. First milestones (suggested ordering, each ends with a check-in)
 
 1. Project skeleton: `platformio.ini`, `defines.hpp`, HAL interfaces, both HAL impls, blink + button-echo to serial. Three builds pass; trivial unit test on `button_manager` runs.
 2. WAV pipeline: `wav_to_cpp.py`, generated sample headers, `Voice` + `VoicePool`, `Mixer` with no reverb. Manual drumming works on real hardware.
 3. Retrigger fade + end ramp. Verify by ear and on a captured I2S log in tests.
 4. Reverb + reverb toggle + LED.
 5. Looper FSM end-to-end.
-6. Auto-drummer with one pattern (metronome). Then add the rest.
-7. Loop profiler + perf check under worst case (50 voices + reverb + autodrummer).
+6. Auto-drummer — all 6 styles (blues, jazz, funk, reggae, gospel, hardrock). Blues and jazz use 12-bar form with crash accents on chord changes. `scripts/midi_to_cpp.py` + `auto_drummer.hpp/cpp` + full unit tests.
+7. Humanization — timing jitter (±5 ms) and velocity variation (±8) on auto-drummer and looper playback. Galois LFSR PRNG, seeded from `esp_random()`. Toggle via `HUMANIZE_ENABLED` define.
+8. Loop profiler + perf check under worst case (50 voices + reverb + autodrummer).
 
 Each milestone ends with: green `build_all.bat`, a commit, and a real-hardware test request to the user.

@@ -46,6 +46,10 @@ size_t NativeI2s::write_nonblocking(const int16_t* buf, size_t samples) {
     return samples;
 }
 
+void NativeI2s::write(const int16_t* buf, size_t samples) {
+    captured_.insert(captured_.end(), buf, buf + samples);
+}
+
 // ----- NativeSerial -----
 void NativeSerial::init(int baud) { baud_ = baud; }
 void NativeSerial::write(const char* s) { buffer_ += s; }

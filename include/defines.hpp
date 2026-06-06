@@ -76,13 +76,28 @@ enum class ButtonRole {
 #define LED_HEARTBEAT_PIN           2
 #define LED_HEARTBEAT_PERIOD_MS     1000
 
-// ===== Auto-drummer BPMs =====  (slow / normal / fast)
+// ===== Auto-drummer =====
+#define AUTO_DRUMMER_PPQN            480   // ticks per quarter note (matches gen_patterns.py)
+#define AUTO_DRUMMER_MAX_INTRO       64    // max events in count-in + intro (bars 0-2)
+#define AUTO_DRUMMER_MAX_LOOP        256   // max events in the looping section
+
+// BPM tables: slow / normal / fast (normal matches the generated .mid files)
 #define BPM_BLUES        {  70,  90, 110 }
-#define BPM_HARDROCK     { 100, 120, 140 }
+#define BPM_JAZZ         {  80, 120, 160 }
+#define BPM_FUNK         {  80, 100, 120 }
 #define BPM_REGGAE       {  65,  80,  95 }
-#define BPM_FUNK         {  90, 105, 125 }
-#define BPM_COUNTRY      {  90, 110, 130 }
-#define BPM_METRONOME    {  60, 100, 160 }
+#define BPM_GOSPEL       {  70,  90, 110 }
+#define BPM_HARDROCK     { 100, 120, 140 }
+
+// ===== Humanization (M7) =====
+// Subtle randomisation of auto-drummer timing and velocity for a less
+// machine-like feel. Timing jitter is +/- HUMANIZE_TIME_SAMPLES per event,
+// re-drawn every loop iteration; velocity jitter is +/- HUMANIZE_VEL.
+// Driven by a deterministic 16-bit LFSR (no heap, no <random>).
+#define HUMANIZE_ENABLED_DEFAULT    1
+#define HUMANIZE_TIME_SAMPLES       220      // ~+/-5 ms at 44.1 kHz
+#define HUMANIZE_VEL                8        // +/-8 MIDI velocity steps
+#define HUMANIZE_LFSR_SEED          0xACE1u
 
 // ===== Profiler =====
 #define PROFILER_LOG_INTERVAL_MS    1000

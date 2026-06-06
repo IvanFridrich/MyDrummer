@@ -23,17 +23,22 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 # Canonical sample set — order is the on-wire SampleId.
-# (enum name, [accepted filename aliases]) — first existing file wins.
-CANONICAL: List[Tuple[str, List[str]]] = [
-    ("KICK",         ["kick.wav"]),
-    ("SNARE",        ["snare.wav"]),
-    ("HIHAT_OPEN",   ["hihat_open.wav", "open_highhat.wav", "open_hihat.wav"]),
-    ("HIHAT_CLOSED", ["hihat_closed.wav", "highhat.wav", "hihat.wav", "closed_hihat.wav"]),
-    ("RIDE",         ["ride.wav"]),
-    ("COWBELL",      ["cowbell.wav"]),
-    ("STICKS",       ["sticks.wav"]),
-    ("CRASH",        ["crash.wav", "crush.wav"]),
-    ("TOM",          ["tom.wav"]),
+# (enum name, [accepted filename aliases], gain) — first existing file wins.
+# gain: 1.0 = full volume, applied by scaling PCM values at generation time.
+CANONICAL: List[Tuple[str, List[str], float]] = [
+    ("KICK",         ["01_bass_drum.wav",    "kick.wav"],        1.0),
+    ("SNARE",        ["02_snare_drum.wav",   "snare.wav"],       1.0),
+    ("TOM_HI",       ["03_high_tom.wav",     "tom_hi.wav"],      0.5),
+    ("TOM_MID",      ["04_mid_tom.wav",      "tom_mid.wav"],     0.5),
+    ("TOM_LO",       ["05_floor_tom.wav",    "tom_lo.wav",    "tom.wav"],  0.5),
+    ("HIHAT_CLOSED", ["06_closed_hi_hat.wav","hihat_closed.wav", "highhat.wav"], 1.0),
+    ("HIHAT_OPEN",   ["07_open_hi_hat.wav",  "hihat_open.wav",   "open_hihat.wav"], 0.5),
+    ("HIHAT_PEDAL",  ["08_pedal_hi_hat.wav", "hihat_pedal.wav"], 1.0),
+    ("CRASH",        ["09_crash.wav",        "crash.wav",     "crush.wav"], 0.2),
+    ("RIDE",         ["10_ride.wav",         "ride.wav"],        0.35),
+    ("STICKS",       ["11_sticks.wav",       "sticks.wav"],      1.0),
+    ("COWBELL",      ["12_cowbell.wav",      "cowbell.wav"],     0.5),
+    ("TAMBOURINE",   ["13_tambourine.wav",   "tambourine.wav"],  0.5),
 ]
 
 EXPECTED_SAMPLE_RATE = 44100
@@ -108,7 +113,7 @@ def emit_header(out: Path) -> None:
         "",
         "enum SampleId : uint8_t {",
     ]
-    for i, (enum_name, _) in enumerate(CANONICAL):
+    for i, (enum_name, _, _gain) in enumerate(CANONICAL):
         lines.append(f"    SAMPLE_{enum_name} = {i},")
     lines.append(f"    SAMPLE_COUNT = {len(CANONICAL)},")
     lines.append("};")
@@ -135,7 +140,7 @@ def emit_source(out: Path, samples_dir: Path) -> None:
     ]
     descriptors: List[str] = []
 
-    for enum_name, aliases in CANONICAL:
+    for enum_name, aliases, gain in CANONICAL:
         array_name = f"kData_{enum_name.lower()}"
 
         chosen_path: Optional[Path] = None
@@ -157,7 +162,10 @@ def emit_source(out: Path, samples_dir: Path) -> None:
             tried = "/".join(aliases)
             print(f"  - SAMPLE_{enum_name}: stub (1 silent sample) [{status}, tried {tried}]")
         else:
-            print(f"  + SAMPLE_{enum_name}: {chosen_path.name} -> {len(samples)} samples")
+            if gain != 1.0:
+                samples = [max(-32768, min(32767, int(round(v * gain)))) for v in samples]
+            gain_pct = f"  gain={gain:.2f}" if gain != 1.0 else ""
+            print(f"  + SAMPLE_{enum_name}: {chosen_path.name} -> {len(samples)} samples{gain_pct}")
 
         body.append(render_array(array_name, samples))
         body.append("")
