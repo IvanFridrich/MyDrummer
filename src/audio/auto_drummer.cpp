@@ -16,13 +16,13 @@ namespace audio
 // ---------------------------------------------------------------------------
 
 static constexpr uint16_t kBpmTable[7][3] = {
-    {70, 90, 110},   // Blues
-    {85, 100, 120},  // Country
-    {80, 120, 160},  // Jazz
-    {80, 100, 120},  // Funk
-    {65, 80, 95},    // Reggae
-    {70, 90, 110},   // Gospel
-    {100, 120, 140}, // HardRock
+    BPM_BLUES,
+    BPM_COUNTRY,
+    BPM_JAZZ,
+    BPM_FUNK,
+    BPM_REGGAE,
+    BPM_GOSPEL,
+    BPM_HARDROCK,
 };
 
 // ---------------------------------------------------------------------------
@@ -253,6 +253,8 @@ size_t AutoDrummer::tick(uint32_t n_samples, uint8_t* trig, uint8_t* vel, size_t
     auto advance_until = [&](auto* arr, uint16_t& idx, uint16_t count, uint32_t limit) {
         while (idx < count && arr[idx].play < limit)
         {
+            if (out >= max_trig)
+                break;
             emit(arr[idx]);
             ++idx;
         }

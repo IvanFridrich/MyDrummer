@@ -88,11 +88,12 @@ enum class ButtonRole
 #define AUTO_DRUMMER_MAX_LOOP 256 // max events in the looping section
 
 // BPM tables: slow / normal / fast (normal matches the generated .mid files)
-#define BPM_BLUES {70, 90, 110}
-#define BPM_JAZZ {80, 120, 160}
-#define BPM_FUNK {80, 100, 120}
-#define BPM_REGGAE {65, 80, 95}
-#define BPM_GOSPEL {70, 90, 110}
+#define BPM_BLUES    {70,  90,  110}
+#define BPM_COUNTRY  {85, 100,  120}
+#define BPM_JAZZ     {80, 120,  160}
+#define BPM_FUNK     {80, 100,  120}
+#define BPM_REGGAE   {65,  80,   95}
+#define BPM_GOSPEL   {70,  90,  110}
 #define BPM_HARDROCK {100, 120, 140}
 
 // ===== Humanization (M7) =====

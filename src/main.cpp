@@ -326,7 +326,9 @@ void setup()
 
     if (!g_hal->i2s->init(SAMPLE_RATE, I2S_BCLK, I2S_LRCK, I2S_DOUT))
     {
-        LOG_E("BOOT", "I2S init failed");
+        LOG_E("BOOT", "I2S init failed — halting");
+        while (true)
+            vTaskDelay(pdMS_TO_TICKS(500));
     }
 
     static ButtonManager bm(g_hal->gpio, g_hal->clock);

@@ -20,7 +20,7 @@ inline int32_t comb_step(int16_t* buf, uint32_t length, uint32_t& idx, int32_t i
     const int32_t bufout = buf[idx];
     const int32_t fed    = ::dummer::util::q15_mul(bufout, REVERB_COMB_FEEDBACK_Q15);
     buf[idx]             = ::dummer::util::sat_i16(in + fed);
-    idx                  = (idx + 1) % length;
+    if (++idx >= length) idx = 0;
     return bufout;
 }
 
@@ -30,7 +30,7 @@ inline int32_t allpass_step(int16_t* buf, uint32_t length, uint32_t& idx, int32_
     const int32_t bufout = buf[idx];
     const int32_t store  = in + ::dummer::util::q15_mul(bufout, REVERB_ALLPASS_COEF_Q15);
     buf[idx]             = ::dummer::util::sat_i16(store);
-    idx                  = (idx + 1) % length;
+    if (++idx >= length) idx = 0;
     return bufout - in;
 }
 
@@ -55,13 +55,16 @@ void Reverb::reset()
     allpass0_idx_ = allpass1_idx_ = 0;
 }
 
+#ifdef BUILD_ESP32
+__attribute__((section(".iram1.text")))
+#endif
 void Reverb::process_inplace(int32_t* acc, size_t n)
 {
     if (!enabled_)
         return;
 
     constexpr int32_t kWet = REVERB_WET_Q15;
-    constexpr int32_t kDry = 32767 - kWet;
+    constexpr int32_t kDry = Q15_UNITY - kWet;
 
     for (size_t i = 0; i < n; ++i)
     {

@@ -13,6 +13,9 @@ Mixer::Mixer(VoicePool& pool, const SampleDescriptor* table, uint8_t table_size,
 {
 }
 
+#ifdef BUILD_ESP32
+__attribute__((section(".iram1.text")))
+#endif
 static void mix_voice(Voice& vc, const SampleDescriptor& d, int32_t* acc, size_t n)
 {
 #if ENABLE_END_RAMP
@@ -35,7 +38,7 @@ static void mix_voice(Voice& vc, const SampleDescriptor& d, int32_t* acc, size_t
         if (vc.position >= end_ramp_start)
         {
             const int32_t samples_left = static_cast<int32_t>(d.length - vc.position);
-            const int32_t ramp_q15     = samples_left * (32768 / VOICE_END_RAMP_SAMPLES);
+            const int32_t ramp_q15     = (samples_left << 15) / static_cast<int32_t>(VOICE_END_RAMP_SAMPLES);
             voiced                     = ::dummer::util::q15_mul(voiced, ramp_q15);
         }
 #endif
@@ -57,6 +60,9 @@ static void mix_voice(Voice& vc, const SampleDescriptor& d, int32_t* acc, size_t
     }
 }
 
+#ifdef BUILD_ESP32
+__attribute__((section(".iram1.text")))
+#endif
 void Mixer::get_samples(int16_t* dst, size_t n)
 {
     constexpr size_t kMaxChunk = static_cast<size_t>(AUDIO_CHUNK);

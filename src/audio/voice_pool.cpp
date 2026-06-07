@@ -11,6 +11,9 @@ VoicePool::VoicePool() : next_seq_(0)
         voices_[i].deactivate();
 }
 
+#ifdef BUILD_ESP32
+__attribute__((section(".iram1.text")))
+#endif
 void VoicePool::trigger(uint8_t sample_id, uint8_t velocity)
 {
     // 1. Retrigger fade-out: mark any active voice for the same sample so the

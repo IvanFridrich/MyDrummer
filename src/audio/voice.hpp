@@ -25,11 +25,12 @@ struct Voice
 {
     static constexpr uint8_t INACTIVE = 0xFF;
 
-    uint8_t   sample_id; // INACTIVE when slot is free
-    uint32_t  position;  // index into SampleDescriptor::data
-    int16_t   gain_q15;  // Q15 amplitude; 32767 = full scale
+    // Hot fields first: all fit in 8 bytes → single cache line hit in the mixer inner loop.
+    uint32_t  position;    // index into SampleDescriptor::data
+    int16_t   gain_q15;    // Q15 amplitude; 32767 = full scale
+    uint8_t   sample_id;   // INACTIVE when slot is free
     FadeState fade;
-    uint32_t  trigger_seq; // monotonically increasing; lowest = oldest
+    uint32_t  trigger_seq; // cold: monotonically increasing; lowest = oldest
 
     bool active() const
     {

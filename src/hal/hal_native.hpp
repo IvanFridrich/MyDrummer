@@ -48,10 +48,6 @@ class NativeI2s : public II2s
     {
         return captured_;
     }
-    void set_capacity(size_t samples)
-    {
-        capacity_ = samples;
-    }
     void clear()
     {
         captured_.clear();
@@ -80,7 +76,6 @@ class NativeI2s : public II2s
 
   private:
     std::vector<int16_t> captured_;
-    size_t               capacity_    = 0; // 0 = unlimited
     int                  sample_rate_ = 0;
     int                  bclk_ = 0, lrck_ = 0, dout_ = 0;
     bool                 initialised_ = false;

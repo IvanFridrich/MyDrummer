@@ -128,6 +128,11 @@ void Looper::store_event(uint8_t sample_id)
 
 void Looper::start_playing()
 {
+    if (record_pos_ == 0)
+    {
+        stop();
+        return;
+    }
     loop_length_ = record_pos_;
     play_pos_    = 0;
     play_idx_    = 0;

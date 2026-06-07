@@ -18,7 +18,7 @@ inline int16_t sat_i16(int32_t v)
 
 inline int32_t q15_mul(int32_t a, int32_t b)
 {
-    return (a * b) >> 15;
+    return static_cast<int32_t>((static_cast<int64_t>(a) * b) >> 15);
 }
 
 } // namespace util
