@@ -14,28 +14,38 @@
 using ::dummer::audio::Voice;
 using ::dummer::audio::VoicePool;
 
-namespace {
+namespace
+{
 
-uint16_t count_with_sample(const VoicePool& pool, uint8_t sid) {
+uint16_t count_with_sample(const VoicePool& pool, uint8_t sid)
+{
     const Voice* v = pool.voices();
-    uint16_t n = 0;
-    for (uint16_t i = 0; i < VoicePool::CAPACITY; ++i) {
-        if (v[i].active() && v[i].sample_id == sid) ++n;
+    uint16_t     n = 0;
+    for (uint16_t i = 0; i < VoicePool::CAPACITY; ++i)
+    {
+        if (v[i].active() && v[i].sample_id == sid)
+            ++n;
     }
     return n;
 }
 
 } // namespace
 
-void setUp() {}
-void tearDown() {}
+void setUp()
+{
+}
+void tearDown()
+{
+}
 
-void test_pool_starts_empty() {
+void test_pool_starts_empty()
+{
     VoicePool pool;
     TEST_ASSERT_EQUAL_UINT16(0, pool.active_count());
 }
 
-void test_single_trigger_allocates_one_voice() {
+void test_single_trigger_allocates_one_voice()
+{
     VoicePool pool;
     pool.trigger(3);
     TEST_ASSERT_EQUAL_UINT16(1, pool.active_count());
@@ -49,7 +59,8 @@ void test_single_trigger_allocates_one_voice() {
     TEST_ASSERT_EQUAL_INT16((int16_t)MASTER_VOLUME_Q15, v[0].gain_q15);
 }
 
-void test_freed_slot_is_reused() {
+void test_freed_slot_is_reused()
+{
     VoicePool pool;
     pool.trigger(1);
     pool.trigger(2);
@@ -67,11 +78,13 @@ void test_freed_slot_is_reused() {
     TEST_ASSERT_EQUAL_UINT16(3, pool.active_count());
 }
 
-void test_pool_full_steals_oldest() {
+void test_pool_full_steals_oldest()
+{
     VoicePool pool;
 
     // Fill the pool — each trigger gets a unique seq, increasing.
-    for (uint16_t i = 0; i < VoicePool::CAPACITY; ++i) {
+    for (uint16_t i = 0; i < VoicePool::CAPACITY; ++i)
+    {
         pool.trigger((uint8_t)(i % 8));
     }
     TEST_ASSERT_EQUAL_UINT16(VoicePool::CAPACITY, pool.active_count());
@@ -88,9 +101,11 @@ void test_pool_full_steals_oldest() {
     // The slot that held the oldest seq is now playing sample 99 with a
     // brand-new (larger) seq.
     bool found_new = false;
-    for (uint16_t i = 0; i < VoicePool::CAPACITY; ++i) {
+    for (uint16_t i = 0; i < VoicePool::CAPACITY; ++i)
+    {
         const Voice& v = pool.voices()[i];
-        if (v.sample_id == 99) {
+        if (v.sample_id == 99)
+        {
             found_new = true;
             TEST_ASSERT_GREATER_THAN_UINT32(oldest_seq, v.trigger_seq);
             TEST_ASSERT_EQUAL_UINT32(0, v.position);
@@ -99,7 +114,8 @@ void test_pool_full_steals_oldest() {
     TEST_ASSERT_TRUE_MESSAGE(found_new, "new sample 99 not found after steal");
 }
 
-void test_retrigger_fades_old_voice_and_starts_new() {
+void test_retrigger_fades_old_voice_and_starts_new()
+{
     // Retrigger: old voice is marked RetriggerFadeOut, a fresh voice is
     // allocated so the new hit starts at full gain with no hard cut.
     VoicePool pool;
@@ -112,19 +128,17 @@ void test_retrigger_fades_old_voice_and_starts_new() {
 
     // Original slot (index 0) must be in fade-out.
     TEST_ASSERT_TRUE(pool.voices()[0].active());
-    TEST_ASSERT_EQUAL_INT(
-        (int)dummer::audio::FadeState::RetriggerFadeOut,
-        (int)pool.voices()[0].fade);
+    TEST_ASSERT_EQUAL_INT((int)dummer::audio::FadeState::RetriggerFadeOut,
+                          (int)pool.voices()[0].fade);
 
     // Fresh slot (index 1) starts clean at position 0, fade None.
     TEST_ASSERT_TRUE(pool.voices()[1].active());
     TEST_ASSERT_EQUAL_UINT32(0, pool.voices()[1].position);
-    TEST_ASSERT_EQUAL_INT(
-        (int)dummer::audio::FadeState::None,
-        (int)pool.voices()[1].fade);
+    TEST_ASSERT_EQUAL_INT((int)dummer::audio::FadeState::None, (int)pool.voices()[1].fade);
 }
 
-void test_trigger_seq_monotonic() {
+void test_trigger_seq_monotonic()
+{
     VoicePool pool;
     pool.trigger(0);
     const uint32_t s0 = pool.voices()[0].trigger_seq;
@@ -136,7 +150,8 @@ void test_trigger_seq_monotonic() {
     TEST_ASSERT_GREATER_THAN_UINT32(s1, s2);
 }
 
-int main(int, char**) {
+int main(int, char**)
+{
     UNITY_BEGIN();
     RUN_TEST(test_pool_starts_empty);
     RUN_TEST(test_single_trigger_allocates_one_voice);
@@ -148,5 +163,8 @@ int main(int, char**) {
 }
 
 #else
-int main() { return 0; }
+int main()
+{
+    return 0;
+}
 #endif // BUILD_NATIVE_TEST

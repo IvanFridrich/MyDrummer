@@ -13,17 +13,27 @@
 #include <stddef.h>
 #include <stdint.h>
 
-namespace dummer { namespace audio {
+namespace dummer
+{
+namespace audio
+{
 
-enum class LooperState : uint8_t { Idle, Arming, Recording, Playing };
+enum class LooperState : uint8_t
+{
+    Idle,
+    Arming,
+    Recording,
+    Playing
+};
 
-class Looper {
+class Looper
+{
   public:
     Looper();
 
     // Button events from the app layer (btn5).
     void on_button_short();
-    void on_button_long();  // stop + clear from any state
+    void on_button_long(); // stop + clear from any state
 
     // Call on every manual drum trigger.
     // In Arming: starts Recording, captures this hit at t=0.
@@ -39,14 +49,18 @@ class Looper {
     // Returns number of events fired this tick (0 in Recording/Idle/Arming).
     size_t tick(uint32_t n_samples, uint8_t* out_sample_ids, size_t max_out);
 
-    LooperState state() const { return state_; }
+    LooperState state() const
+    {
+        return state_;
+    }
 
     // Stop playback/recording and clear all loop data. Idempotent.
     // Called by the auto-drummer for mutual exclusion.
     void stop();
 
   private:
-    struct Event {
+    struct Event
+    {
         uint32_t time_samples;
         uint8_t  sample_id;
     };
@@ -57,10 +71,11 @@ class Looper {
     LooperState state_;
     Event       events_[LOOPER_MAX_EVENTS];
     uint16_t    event_count_;
-    uint32_t    record_pos_;   // samples since t0, during Recording
-    uint32_t    play_pos_;     // playhead offset within loop, during Playing
-    uint32_t    loop_length_;  // loop duration in samples
-    uint16_t    play_idx_;     // index of next event to emit
+    uint32_t    record_pos_;  // samples since t0, during Recording
+    uint32_t    play_pos_;    // playhead offset within loop, during Playing
+    uint32_t    loop_length_; // loop duration in samples
+    uint16_t    play_idx_;    // index of next event to emit
 };
 
-}} // namespace dummer::audio
+} // namespace audio
+} // namespace dummer

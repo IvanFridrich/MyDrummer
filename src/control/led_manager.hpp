@@ -10,9 +10,13 @@
 
 #include <stdint.h>
 
-namespace dummer { namespace control {
+namespace dummer
+{
+namespace control
+{
 
-enum class LedId : uint8_t {
+enum class LedId : uint8_t
+{
     Kick = 0,
     Snare,
     Hihat,
@@ -22,7 +26,8 @@ enum class LedId : uint8_t {
     Count
 };
 
-class LedManager {
+class LedManager
+{
   public:
     LedManager(::dummer::hal::IGpio* gpio, ::dummer::hal::IClock* clock);
 
@@ -40,28 +45,32 @@ class LedManager {
 #ifdef BUILD_NATIVE_TEST
     // Test hook — defines.hpp leaves most LED pins at -1 (no-op). Tests need
     // real pin numbers to exercise the flash / steady paths.
-    void set_pin_for_test(LedId id, int pin) {
+    void set_pin_for_test(LedId id, int pin)
+    {
         const auto i = static_cast<uint8_t>(id);
-        if (i < static_cast<uint8_t>(LedId::Count)) slots_[i].pin = pin;
+        if (i < static_cast<uint8_t>(LedId::Count))
+            slots_[i].pin = pin;
     }
 #endif
 
   private:
-    struct Slot {
+    struct Slot
+    {
         int      pin;
-        bool     steady_on;      // when not flashing, this is the level we hold
+        bool     steady_on; // when not flashing, this is the level we hold
         bool     flashing;
         uint32_t flash_until_ms;
     };
 
-    ::dummer::hal::IGpio*  gpio_;
-    ::dummer::hal::IClock* clock_;
+    ::dummer::hal::IGpio*   gpio_;
+    ::dummer::hal::IClock*  clock_;
     static constexpr size_t kSlotCount = static_cast<size_t>(LedId::Count);
-    Slot                   slots_[kSlotCount];
-    uint32_t               heartbeat_next_toggle_ms_;
-    bool                   heartbeat_level_;
+    Slot                    slots_[kSlotCount];
+    uint32_t                heartbeat_next_toggle_ms_;
+    bool                    heartbeat_level_;
 
     void apply(uint8_t i, bool on);
 };
 
-}} // namespace dummer::control
+} // namespace control
+} // namespace dummer

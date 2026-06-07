@@ -1,18 +1,21 @@
-# Based on Google C++ Style, adapted for the existing Dummer codebase:
-#   - 4-space indent (we already use this)
-#   - 100-col line limit (more room for DSP expressions)
-#   - keep short blocks on the same line where natural
+# Allman brace style: opening braces always on their own line.
+# 4-space indent, 100-col limit, C++17.
 
-BasedOnStyle: Google
+BasedOnStyle: LLVM
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
 ColumnLimit: 100
+
+# Allman: every opening brace on a new line
+BreakBeforeBraces: Allman
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+
 AccessModifierOffset: -2
-AllowShortFunctionsOnASingleLine: Inline
-AllowShortIfStatementsOnASingleLine: WithoutElse
-AllowShortLoopsOnASingleLine: true
-AllowShortBlocksOnASingleLine: Always
 AlignConsecutiveAssignments: Consecutive
 AlignConsecutiveDeclarations: Consecutive
 AlignTrailingComments: true

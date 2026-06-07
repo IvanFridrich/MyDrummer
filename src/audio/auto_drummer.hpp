@@ -14,9 +14,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-namespace dummer { namespace audio {
+namespace dummer
+{
+namespace audio
+{
 
-enum class AutoStyle : uint8_t {
+enum class AutoStyle : uint8_t
+{
     Off      = 0,
     Blues    = 1,
     Country  = 2,
@@ -28,7 +32,8 @@ enum class AutoStyle : uint8_t {
     COUNT    = 8,
 };
 
-class AutoDrummer {
+class AutoDrummer
+{
   public:
     AutoDrummer();
 
@@ -43,14 +48,29 @@ class AutoDrummer {
     // Stop and return to Off. Idempotent.
     void stop();
 
-    AutoStyle style()  const { return style_; }
-    bool      active() const { return style_ != AutoStyle::Off; }
-    uint8_t   speed()  const { return speed_idx_; }
+    AutoStyle style() const
+    {
+        return style_;
+    }
+    bool active() const
+    {
+        return style_ != AutoStyle::Off;
+    }
+    uint8_t speed() const
+    {
+        return speed_idx_;
+    }
 
     // Humanization (M7): timing/velocity jitter. On by default
     // (HUMANIZE_ENABLED_DEFAULT). Toggling reseeds nothing; it just gates jitter.
-    void set_humanize(bool on) { humanizer_.set_enabled(on); }
-    bool humanize() const { return humanizer_.enabled(); }
+    void set_humanize(bool on)
+    {
+        humanizer_.set_enabled(on);
+    }
+    bool humanize() const
+    {
+        return humanizer_.enabled();
+    }
 
     // Advance the clock by n_samples.
     // Fires any events that fall in the current window into trig[0..return-1]
@@ -64,13 +84,14 @@ class AutoDrummer {
     static constexpr uint16_t kMaxLoop  = AUTO_DRUMMER_MAX_LOOP;
 
     AutoStyle style_;
-    uint8_t   speed_idx_;   // 0=slow 1=normal 2=fast
+    uint8_t   speed_idx_; // 0=slow 1=normal 2=fast
 
-    struct PatternEvent {
-        uint32_t time;   // base time (absolute for intro, offset-from-loop-start for loop)
-        uint32_t play;   // jittered fire time used by tick()
-        uint8_t  note;   // SampleId
-        uint8_t  vel;    // base MIDI velocity (1-127)
+    struct PatternEvent
+    {
+        uint32_t time; // base time (absolute for intro, offset-from-loop-start for loop)
+        uint32_t play; // jittered fire time used by tick()
+        uint8_t  note; // SampleId
+        uint8_t  vel;  // base MIDI velocity (1-127)
     };
 
     // Pre-computed sample positions built by load_pattern().
@@ -80,24 +101,25 @@ class AutoDrummer {
     PatternEvent loop_[kMaxLoop];
     uint16_t     loop_count_;
 
-    uint32_t  loop_start_sample_;        // absolute sample where loop begins
-    uint32_t  loop_length_samples_;      // length of one loop iteration
+    uint32_t loop_start_sample_;   // absolute sample where loop begins
+    uint32_t loop_length_samples_; // length of one loop iteration
 
     // Playback state
-    uint32_t  pos_samples_;              // absolute sample counter
-    uint16_t  intro_event_idx_;          // next intro event to fire
-    bool      in_loop_;                  // true once intro has played through
-    uint32_t  loop_pos_samples_;         // position within current loop iteration
-    uint16_t  loop_event_idx_;           // next loop event to fire
+    uint32_t pos_samples_;      // absolute sample counter
+    uint16_t intro_event_idx_;  // next intro event to fire
+    bool     in_loop_;          // true once intro has played through
+    uint32_t loop_pos_samples_; // position within current loop iteration
+    uint16_t loop_event_idx_;   // next loop event to fire
 
     Humanizer humanizer_;
 
-    void    load_pattern();
+    void load_pattern();
     // Refill *_play_ from *_times_ with fresh +/- timing jitter, clamped to be
     // monotonic and within range so the event scan never reorders or overruns.
-    void    rejitter_intro();
-    void    rejitter_loop();
+    void           rejitter_intro();
+    void           rejitter_loop();
     static uint8_t gm_to_sample_id(uint8_t gm_note);
 };
 
-}} // namespace dummer::audio
+} // namespace audio
+} // namespace dummer

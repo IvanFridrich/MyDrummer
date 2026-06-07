@@ -20,40 +20,54 @@
 
 using namespace ::dummer::hal;
 using namespace ::dummer::hal::native;
-using ::dummer::control::ButtonManager;
 using ::dummer::control::ButtonEvent;
 using ::dummer::control::ButtonEventType;
+using ::dummer::control::ButtonManager;
 
-namespace {
+namespace
+{
 
-constexpr int kKickPin = 4;  // index 0 in BUTTON_PINS
+constexpr int kKickPin               = 4; // index 0 in BUTTON_PINS
 constexpr int kAllPins[BUTTON_COUNT] = BUTTON_PINS;
 
-ButtonManager make_bm() { return ButtonManager(&gpio(), &clock()); }
+ButtonManager make_bm()
+{
+    return ButtonManager(&gpio(), &clock());
+}
 
-void drain(ButtonManager& bm) {
-    while (bm.poll().type != ButtonEventType::None) {}
+void drain(ButtonManager& bm)
+{
+    while (bm.poll().type != ButtonEventType::None)
+    {
+    }
 }
 
 } // namespace
 
-void setUp() {
+void setUp()
+{
     reset_all();
     // Buttons are active-low with internal pull-up — idle = HIGH on every pin.
-    for (int p : kAllPins) gpio().set_pin(p, true);
+    for (int p : kAllPins)
+        gpio().set_pin(p, true);
 }
 
-void tearDown() {}
+void tearDown()
+{
+}
 
-void test_pin_modes_are_input_pullup() {
+void test_pin_modes_are_input_pullup()
+{
     ButtonManager bm = make_bm();
     bm.begin();
-    for (int p : kAllPins) {
+    for (int p : kAllPins)
+    {
         TEST_ASSERT_EQUAL(PIN_INPUT_PULLUP, gpio().get_mode(p));
     }
 }
 
-void test_no_event_when_idle() {
+void test_no_event_when_idle()
+{
     ButtonManager bm = make_bm();
     bm.begin();
     clock().advance_ms(100);
@@ -61,7 +75,8 @@ void test_no_event_when_idle() {
     TEST_ASSERT_FALSE(bm.is_pressed(0));
 }
 
-void test_press_fires_only_after_debounce() {
+void test_press_fires_only_after_debounce()
+{
     ButtonManager bm = make_bm();
     bm.begin();
 
@@ -86,7 +101,8 @@ void test_press_fires_only_after_debounce() {
     TEST_ASSERT_EQUAL((int)ButtonEventType::None, (int)bm.poll().type);
 }
 
-void test_release_event() {
+void test_release_event()
+{
     ButtonManager bm = make_bm();
     bm.begin();
 
@@ -106,7 +122,8 @@ void test_release_event() {
     TEST_ASSERT_FALSE(bm.is_pressed(0));
 }
 
-void test_long_press_fires_once() {
+void test_long_press_fires_once()
+{
     ButtonManager bm = make_bm();
     bm.begin();
 
@@ -131,13 +148,15 @@ void test_long_press_fires_once() {
     TEST_ASSERT_EQUAL((int)ButtonEventType::None, (int)bm.poll().type);
 }
 
-void test_bounce_is_ignored() {
+void test_bounce_is_ignored()
+{
     ButtonManager bm = make_bm();
     bm.begin();
 
     // Rapid toggling inside the debounce window — never stable long enough
     // to register as a press. Ends back at HIGH (idle).
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 8; ++i)
+    {
         gpio().set_pin(kKickPin, false);
         bm.poll();
         clock().advance_ms(2);
@@ -150,7 +169,8 @@ void test_bounce_is_ignored() {
     TEST_ASSERT_FALSE(bm.is_pressed(0));
 }
 
-void test_independent_buttons() {
+void test_independent_buttons()
+{
     ButtonManager bm = make_bm();
     bm.begin();
 
@@ -167,7 +187,8 @@ void test_independent_buttons() {
     TEST_ASSERT_FALSE(bm.is_pressed(6));
 }
 
-int main(int, char**) {
+int main(int, char**)
+{
     UNITY_BEGIN();
     RUN_TEST(test_pin_modes_are_input_pullup);
     RUN_TEST(test_no_event_when_idle);
@@ -180,5 +201,8 @@ int main(int, char**) {
 }
 
 #else
-int main() { return 0; }
+int main()
+{
+    return 0;
+}
 #endif // BUILD_NATIVE_TEST

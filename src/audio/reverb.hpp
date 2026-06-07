@@ -14,9 +14,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-namespace dummer { namespace audio {
+namespace dummer
+{
+namespace audio
+{
 
-class Reverb {
+class Reverb
+{
   public:
     Reverb();
 
@@ -24,8 +28,14 @@ class Reverb {
     // replaced with the wet/dry mix. No-op when disabled.
     void process_inplace(int32_t* acc, size_t n);
 
-    void set_enabled(bool on) { enabled_ = on; }
-    bool enabled() const      { return enabled_; }
+    void set_enabled(bool on)
+    {
+        enabled_ = on;
+    }
+    bool enabled() const
+    {
+        return enabled_;
+    }
 
     // Clear all delay-line state. Call when toggling on, or in tests.
     void reset();
@@ -58,4 +68,5 @@ class Reverb {
     bool enabled_;
 };
 
-}} // namespace dummer::audio
+} // namespace audio
+} // namespace dummer

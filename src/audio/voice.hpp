@@ -10,26 +10,35 @@
 
 #include <stdint.h>
 
-namespace dummer { namespace audio {
+namespace dummer
+{
+namespace audio
+{
 
-enum class FadeState : uint8_t {
+enum class FadeState : uint8_t
+{
     None = 0,
-    RetriggerFadeOut,   // exponentially decay gain_q15 each sample, then stop
+    RetriggerFadeOut, // exponentially decay gain_q15 each sample, then stop
 };
 
-struct Voice {
+struct Voice
+{
     static constexpr uint8_t INACTIVE = 0xFF;
 
-    uint8_t   sample_id;        // INACTIVE when slot is free
-    uint32_t  position;         // index into SampleDescriptor::data
-    int16_t   gain_q15;         // Q15 amplitude; 32767 = full scale
+    uint8_t   sample_id; // INACTIVE when slot is free
+    uint32_t  position;  // index into SampleDescriptor::data
+    int16_t   gain_q15;  // Q15 amplitude; 32767 = full scale
     FadeState fade;
-    uint32_t  trigger_seq;      // monotonically increasing; lowest = oldest
+    uint32_t  trigger_seq; // monotonically increasing; lowest = oldest
 
-    bool active() const { return sample_id != INACTIVE; }
+    bool active() const
+    {
+        return sample_id != INACTIVE;
+    }
 
     // Reset to a freshly-triggered state on the given sample.
-    void start(uint8_t sid, uint32_t seq) {
+    void start(uint8_t sid, uint32_t seq)
+    {
         sample_id   = sid;
         position    = 0;
         gain_q15    = Q15_UNITY;
@@ -37,7 +46,8 @@ struct Voice {
         trigger_seq = seq;
     }
 
-    void deactivate() {
+    void deactivate()
+    {
         sample_id = INACTIVE;
         position  = 0;
         gain_q15  = 0;
@@ -45,4 +55,5 @@ struct Voice {
     }
 };
 
-}} // namespace dummer::audio
+} // namespace audio
+} // namespace dummer

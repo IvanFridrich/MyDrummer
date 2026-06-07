@@ -13,21 +13,30 @@
 #include <stddef.h>
 #include <stdint.h>
 
-namespace dummer { namespace audio {
+namespace dummer
+{
+namespace audio
+{
 
-class Reverb;  // forward — only the pointer is used here
+class Reverb; // forward — only the pointer is used here
 
-class Mixer {
+class Mixer
+{
   public:
-    Mixer(VoicePool& pool, const SampleDescriptor* table, uint8_t table_size,
-          Reverb* reverb = nullptr);
+    Mixer(VoicePool&              pool,
+          const SampleDescriptor* table,
+          uint8_t                 table_size,
+          Reverb*                 reverb = nullptr);
 
     // Fill dst[0..n-1] with the next n mono int16 samples. n must be
     // <= AUDIO_CHUNK; larger requests are clamped. Voices whose sample
     // data is exhausted are deactivated.
     void get_samples(int16_t* dst, size_t n);
 
-    Reverb* reverb() { return reverb_; }
+    Reverb* reverb()
+    {
+        return reverb_;
+    }
 
   private:
     VoicePool*              pool_;
@@ -36,4 +45,5 @@ class Mixer {
     Reverb*                 reverb_;
 };
 
-}} // namespace dummer::audio
+} // namespace audio
+} // namespace dummer

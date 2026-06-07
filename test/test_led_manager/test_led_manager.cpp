@@ -12,33 +12,44 @@
 #include "hal/hal_native.hpp"
 #include "control/led_manager.hpp"
 
+using ::dummer::control::LedId;
+using ::dummer::control::LedManager;
 using ::dummer::hal::native::clock;
 using ::dummer::hal::native::gpio;
 using ::dummer::hal::native::reset_all;
-using ::dummer::control::LedManager;
-using ::dummer::control::LedId;
 
-namespace {
+namespace
+{
 
 constexpr int kKickTestPin      = 100;
 constexpr int kSnareTestPin     = 101;
 constexpr int kHeartbeatTestPin = 102;
 
-LedManager make_lm() { return LedManager(&gpio(), &clock()); }
+LedManager make_lm()
+{
+    return LedManager(&gpio(), &clock());
+}
 
-void wire_test_pins(LedManager& lm) {
-    lm.set_pin_for_test(LedId::Kick,      kKickTestPin);
-    lm.set_pin_for_test(LedId::Snare,     kSnareTestPin);
+void wire_test_pins(LedManager& lm)
+{
+    lm.set_pin_for_test(LedId::Kick, kKickTestPin);
+    lm.set_pin_for_test(LedId::Snare, kSnareTestPin);
     lm.set_pin_for_test(LedId::Heartbeat, kHeartbeatTestPin);
     lm.begin();
 }
 
 } // namespace
 
-void setUp() { reset_all(); }
-void tearDown() {}
+void setUp()
+{
+    reset_all();
+}
+void tearDown()
+{
+}
 
-void test_begin_drives_pins_low_and_sets_output_mode() {
+void test_begin_drives_pins_low_and_sets_output_mode()
+{
     LedManager lm = make_lm();
     wire_test_pins(lm);
     TEST_ASSERT_EQUAL(::dummer::hal::PIN_OUTPUT, gpio().get_mode(kKickTestPin));
@@ -48,7 +59,8 @@ void test_begin_drives_pins_low_and_sets_output_mode() {
     TEST_ASSERT_FALSE(gpio().get_written(kSnareTestPin));
 }
 
-void test_flash_raises_pin_then_clears_after_window() {
+void test_flash_raises_pin_then_clears_after_window()
+{
     LedManager lm = make_lm();
     wire_test_pins(lm);
 
@@ -66,7 +78,8 @@ void test_flash_raises_pin_then_clears_after_window() {
     TEST_ASSERT_FALSE(gpio().get_written(kKickTestPin));
 }
 
-void test_steady_holds_level_until_cleared() {
+void test_steady_holds_level_until_cleared()
+{
     LedManager lm = make_lm();
     wire_test_pins(lm);
 
@@ -82,7 +95,8 @@ void test_steady_holds_level_until_cleared() {
     TEST_ASSERT_FALSE(gpio().get_written(kSnareTestPin));
 }
 
-void test_flash_returns_to_steady_state_after_window() {
+void test_flash_returns_to_steady_state_after_window()
+{
     LedManager lm = make_lm();
     wire_test_pins(lm);
 
@@ -94,14 +108,15 @@ void test_flash_returns_to_steady_state_after_window() {
 
     clock().advance_ms(LED_FLASH_MS + 5);
     lm.tick();
-    TEST_ASSERT_TRUE(gpio().get_written(kSnareTestPin));  // steady remembered
+    TEST_ASSERT_TRUE(gpio().get_written(kSnareTestPin)); // steady remembered
 
     // Flip steady off without re-flashing — pin should drop on the next call.
     lm.set_steady(LedId::Snare, false);
     TEST_ASSERT_FALSE(gpio().get_written(kSnareTestPin));
 }
 
-void test_heartbeat_toggles_at_half_period() {
+void test_heartbeat_toggles_at_half_period()
+{
     LedManager lm = make_lm();
     wire_test_pins(lm);
 
@@ -127,7 +142,8 @@ void test_heartbeat_toggles_at_half_period() {
     TEST_ASSERT_FALSE(gpio().get_written(kHeartbeatTestPin));
 }
 
-void test_no_op_on_unconfigured_pin() {
+void test_no_op_on_unconfigured_pin()
+{
     // All LED pins from defines.hpp default to -1 except heartbeat; with no
     // set_pin_for_test() calls, flash and set_steady must silently no-op
     // rather than writing to pin -1 (which would corrupt the NativeGpio map).
@@ -143,7 +159,8 @@ void test_no_op_on_unconfigured_pin() {
     TEST_ASSERT_EQUAL(-1, gpio().get_mode(-1));
 }
 
-void test_out_of_range_led_id_is_safe() {
+void test_out_of_range_led_id_is_safe()
+{
     LedManager lm = make_lm();
     lm.begin();
     // Cast a deliberately-invalid value through LedId; must not crash or
@@ -152,7 +169,8 @@ void test_out_of_range_led_id_is_safe() {
     lm.set_steady(static_cast<LedId>(99), true);
 }
 
-int main(int, char**) {
+int main(int, char**)
+{
     UNITY_BEGIN();
     RUN_TEST(test_begin_drives_pins_low_and_sets_output_mode);
     RUN_TEST(test_flash_raises_pin_then_clears_after_window);
@@ -165,5 +183,8 @@ int main(int, char**) {
 }
 
 #else
-int main() { return 0; }
+int main()
+{
+    return 0;
+}
 #endif // BUILD_NATIVE_TEST

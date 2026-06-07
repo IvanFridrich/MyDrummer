@@ -11,9 +11,13 @@
 
 #include <stdint.h>
 
-namespace dummer { namespace audio {
+namespace dummer
+{
+namespace audio
+{
 
-class VoicePool {
+class VoicePool
+{
   public:
     static constexpr uint16_t CAPACITY = MAX_VOICES;
 
@@ -25,8 +29,14 @@ class VoicePool {
     void trigger(uint8_t sample_id, uint8_t velocity = 127);
 
     // Direct access — the mixer iterates the array each chunk.
-    Voice*       voices()       { return voices_; }
-    const Voice* voices() const { return voices_; }
+    Voice* voices()
+    {
+        return voices_;
+    }
+    const Voice* voices() const
+    {
+        return voices_;
+    }
 
     uint16_t active_count() const;
 
@@ -35,4 +45,5 @@ class VoicePool {
     uint32_t next_seq_;
 };
 
-}} // namespace dummer::audio
+} // namespace audio
+} // namespace dummer

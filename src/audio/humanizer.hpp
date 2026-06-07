@@ -10,14 +10,24 @@
 
 #include <stdint.h>
 
-namespace dummer { namespace audio {
+namespace dummer
+{
+namespace audio
+{
 
-class Humanizer {
+class Humanizer
+{
   public:
     explicit Humanizer(uint16_t seed = HUMANIZE_LFSR_SEED);
 
-    void set_enabled(bool on) { enabled_ = on; }
-    bool enabled() const { return enabled_; }
+    void set_enabled(bool on)
+    {
+        enabled_ = on;
+    }
+    bool enabled() const
+    {
+        return enabled_;
+    }
 
     // Restart the pseudo-random stream. A zero seed falls back to the default
     // (an all-zero LFSR state would lock up).
@@ -37,4 +47,5 @@ class Humanizer {
     bool     enabled_;
 };
 
-}} // namespace dummer::audio
+} // namespace audio
+} // namespace dummer

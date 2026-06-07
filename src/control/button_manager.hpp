@@ -12,21 +12,27 @@
 
 #include <stdint.h>
 
-namespace dummer { namespace control {
+namespace dummer
+{
+namespace control
+{
 
-enum class ButtonEventType : uint8_t {
+enum class ButtonEventType : uint8_t
+{
     None = 0,
-    Press,        // debounced falling edge (button pressed)
-    Release,      // debounced rising edge (button released)
-    LongPress,    // held > BUTTON_LONGPRESS_MS, fires once
+    Press,     // debounced falling edge (button pressed)
+    Release,   // debounced rising edge (button released)
+    LongPress, // held > BUTTON_LONGPRESS_MS, fires once
 };
 
-struct ButtonEvent {
+struct ButtonEvent
+{
     ButtonEventType type;
-    uint8_t         index;   // 0..BUTTON_COUNT-1
+    uint8_t         index; // 0..BUTTON_COUNT-1
 };
 
-class ButtonManager {
+class ButtonManager
+{
   public:
     ButtonManager(::dummer::hal::IGpio* gpio, ::dummer::hal::IClock* clock);
 
@@ -46,17 +52,18 @@ class ButtonManager {
     static constexpr uint8_t COUNT = BUTTON_COUNT;
 
   private:
-    struct State {
-        bool     raw_level;          // last sampled raw value
-        bool     debounced_pressed;  // true = currently pressed (post-debounce)
-        uint32_t last_change_ms;     // when raw_level last toggled
-        uint32_t press_started_ms;   // when debounced press began
-        bool     long_press_fired;   // already emitted LongPress for this press
+    struct State
+    {
+        bool     raw_level;         // last sampled raw value
+        bool     debounced_pressed; // true = currently pressed (post-debounce)
+        uint32_t last_change_ms;    // when raw_level last toggled
+        uint32_t press_started_ms;  // when debounced press began
+        bool     long_press_fired;  // already emitted LongPress for this press
         // Pending event queue per button — at most one of each type can be
         // queued, in priority order Press > LongPress > Release.
-        bool     pend_press;
-        bool     pend_release;
-        bool     pend_long;
+        bool pend_press;
+        bool pend_release;
+        bool pend_long;
     };
 
     ::dummer::hal::IGpio*  gpio_;
@@ -70,4 +77,5 @@ class ButtonManager {
     static bool pin_to_pressed(bool raw_level);
 };
 
-}} // namespace dummer::control
+} // namespace control
+} // namespace dummer
