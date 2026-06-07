@@ -1,4 +1,5 @@
 #include "reverb.hpp"
+#include "util/dsp.hpp"
 
 #include <string.h>
 
@@ -10,15 +11,6 @@ namespace audio
 namespace
 {
 
-inline int16_t sat_to_i16(int32_t v)
-{
-    if (v > INT16_MAX)
-        v = INT16_MAX;
-    if (v < INT16_MIN)
-        v = INT16_MIN;
-    return static_cast<int16_t>(v);
-}
-
 // Schroeder feedback-comb: y[n] = x[n] + g * y[n - M].
 // Returns the delayed sample at the read pointer; stores input + feedback*bufout
 // back into the buffer, advances index. All math in int32 with int16 saturation
@@ -26,8 +18,8 @@ inline int16_t sat_to_i16(int32_t v)
 inline int32_t comb_step(int16_t* buf, uint32_t length, uint32_t& idx, int32_t in)
 {
     const int32_t bufout = buf[idx];
-    const int32_t fed    = (bufout * REVERB_COMB_FEEDBACK_Q15) >> 15;
-    buf[idx]             = sat_to_i16(in + fed);
+    const int32_t fed    = ::dummer::util::q15_mul(bufout, REVERB_COMB_FEEDBACK_Q15);
+    buf[idx]             = ::dummer::util::sat_i16(in + fed);
     idx                  = (idx + 1) % length;
     return bufout;
 }
@@ -36,8 +28,8 @@ inline int32_t comb_step(int16_t* buf, uint32_t length, uint32_t& idx, int32_t i
 inline int32_t allpass_step(int16_t* buf, uint32_t length, uint32_t& idx, int32_t in)
 {
     const int32_t bufout = buf[idx];
-    const int32_t store  = in + ((bufout * REVERB_ALLPASS_COEF_Q15) >> 15);
-    buf[idx]             = sat_to_i16(store);
+    const int32_t store  = in + ::dummer::util::q15_mul(bufout, REVERB_ALLPASS_COEF_Q15);
+    buf[idx]             = ::dummer::util::sat_i16(store);
     idx                  = (idx + 1) % length;
     return bufout - in;
 }
@@ -76,7 +68,7 @@ void Reverb::process_inplace(int32_t* acc, size_t n)
         // The pre-reverb accumulator may already exceed int16 — clip before
         // feeding it into the delay lines (which are int16).
         const int32_t dry = acc[i];
-        const int32_t in  = sat_to_i16(dry);
+        const int32_t in  = ::dummer::util::sat_i16(dry);
 
         // 4 parallel feedback combs, summed.
         int32_t comb_sum = 0;
@@ -91,7 +83,7 @@ void Reverb::process_inplace(int32_t* acc, size_t n)
 
         // Wet/dry mix — keep the dry path in int32 so the saturating clip
         // downstream in the mixer still owns the final int16 conversion.
-        acc[i] = ((dry * kDry) >> 15) + ((ap * kWet) >> 15);
+        acc[i] = ::dummer::util::q15_mul(dry, kDry) + ::dummer::util::q15_mul(ap, kWet);
     }
 }
 

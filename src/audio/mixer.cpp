@@ -1,5 +1,6 @@
 #include "mixer.hpp"
 #include "reverb.hpp"
+#include "util/dsp.hpp"
 #include "voice.hpp"
 
 namespace dummer
@@ -29,13 +30,13 @@ static void mix_voice(Voice& vc, const SampleDescriptor& d, int32_t* acc, size_t
             break;
         }
         const int32_t sample = static_cast<int32_t>(d.data[vc.position]);
-        int32_t       voiced = (sample * vc.gain_q15) >> 15;
+        int32_t       voiced = ::dummer::util::q15_mul(sample, vc.gain_q15);
 #if ENABLE_END_RAMP
         if (vc.position >= end_ramp_start)
         {
             const int32_t samples_left = static_cast<int32_t>(d.length - vc.position);
             const int32_t ramp_q15     = samples_left * (32768 / VOICE_END_RAMP_SAMPLES);
-            voiced                     = (voiced * ramp_q15) >> 15;
+            voiced                     = ::dummer::util::q15_mul(voiced, ramp_q15);
         }
 #endif
         acc[i] += voiced;
@@ -44,7 +45,7 @@ static void mix_voice(Voice& vc, const SampleDescriptor& d, int32_t* acc, size_t
         if (vc.fade == FadeState::RetriggerFadeOut)
         {
             const int32_t decayed =
-                (static_cast<int32_t>(vc.gain_q15) * RETRIGGER_FADE_K_Q15) >> 15;
+                ::dummer::util::q15_mul(static_cast<int32_t>(vc.gain_q15), RETRIGGER_FADE_K_Q15);
             vc.gain_q15 = static_cast<int16_t>(decayed);
             if (vc.gain_q15 == 0)
             {
@@ -94,14 +95,7 @@ void Mixer::get_samples(int16_t* dst, size_t n)
     }
 
     for (size_t i = 0; i < n; ++i)
-    {
-        int32_t s = acc[i];
-        if (s > INT16_MAX)
-            s = INT16_MAX;
-        if (s < INT16_MIN)
-            s = INT16_MIN;
-        dst[i] = static_cast<int16_t>(s);
-    }
+        dst[i] = ::dummer::util::sat_i16(acc[i]);
 }
 
 } // namespace audio

@@ -174,36 +174,31 @@ void AutoDrummer::load_pattern()
 // dropped at the loop boundary.
 // ---------------------------------------------------------------------------
 
-void AutoDrummer::rejitter_intro()
+template <typename TEvent>
+static void rejitter(TEvent* arr, uint16_t count, uint32_t bound, Humanizer& h)
 {
-    const uint32_t hi   = (loop_start_sample_ > 0) ? loop_start_sample_ - 1u : 0u;
+    const uint32_t hi   = (bound > 0) ? bound - 1u : 0u;
     uint32_t       prev = 0;
-    for (uint16_t i = 0; i < intro_count_; ++i)
+    for (uint16_t i = 0; i < count; ++i)
     {
-        int64_t t = static_cast<int64_t>(intro_[i].time) + humanizer_.jitter(HUMANIZE_TIME_SAMPLES);
+        int64_t t = static_cast<int64_t>(arr[i].time) + h.jitter(HUMANIZE_TIME_SAMPLES);
         if (t < static_cast<int64_t>(prev))
             t = static_cast<int64_t>(prev);
         if (t > static_cast<int64_t>(hi))
             t = static_cast<int64_t>(hi);
-        intro_[i].play = static_cast<uint32_t>(t);
-        prev           = intro_[i].play;
+        arr[i].play = static_cast<uint32_t>(t);
+        prev        = arr[i].play;
     }
+}
+
+void AutoDrummer::rejitter_intro()
+{
+    rejitter(intro_, intro_count_, loop_start_sample_, humanizer_);
 }
 
 void AutoDrummer::rejitter_loop()
 {
-    const uint32_t hi   = (loop_length_samples_ > 0) ? loop_length_samples_ - 1u : 0u;
-    uint32_t       prev = 0;
-    for (uint16_t i = 0; i < loop_count_; ++i)
-    {
-        int64_t t = static_cast<int64_t>(loop_[i].time) + humanizer_.jitter(HUMANIZE_TIME_SAMPLES);
-        if (t < static_cast<int64_t>(prev))
-            t = static_cast<int64_t>(prev);
-        if (t > static_cast<int64_t>(hi))
-            t = static_cast<int64_t>(hi);
-        loop_[i].play = static_cast<uint32_t>(t);
-        prev          = loop_[i].play;
-    }
+    rejitter(loop_, loop_count_, loop_length_samples_, humanizer_);
 }
 
 // ---------------------------------------------------------------------------
@@ -255,16 +250,20 @@ size_t AutoDrummer::tick(uint32_t n_samples, uint8_t* trig, uint8_t* vel, size_t
         ++out;
     };
 
+    auto advance_until = [&](auto* arr, uint16_t& idx, uint16_t count, uint32_t limit) {
+        while (idx < count && arr[idx].play < limit)
+        {
+            emit(arr[idx]);
+            ++idx;
+        }
+    };
+
     // --- Intro phase -------------------------------------------------------
     if (!in_loop_)
     {
         const uint32_t new_pos = pos_samples_ + n_samples;
 
-        while (intro_event_idx_ < intro_count_ && intro_[intro_event_idx_].play < new_pos)
-        {
-            emit(intro_[intro_event_idx_]);
-            ++intro_event_idx_;
-        }
+        advance_until(intro_, intro_event_idx_, intro_count_, new_pos);
 
         if (new_pos >= loop_start_sample_)
         {
@@ -273,11 +272,7 @@ size_t AutoDrummer::tick(uint32_t n_samples, uint8_t* trig, uint8_t* vel, size_t
             loop_event_idx_   = 0;
             rejitter_loop();
 
-            while (loop_event_idx_ < loop_count_ && loop_[loop_event_idx_].play < loop_pos_samples_)
-            {
-                emit(loop_[loop_event_idx_]);
-                ++loop_event_idx_;
-            }
+            advance_until(loop_, loop_event_idx_, loop_count_, loop_pos_samples_);
         }
 
         pos_samples_ = new_pos;
@@ -289,21 +284,13 @@ size_t AutoDrummer::tick(uint32_t n_samples, uint8_t* trig, uint8_t* vel, size_t
 
     if (new_loop_pos >= loop_length_samples_)
     {
-        while (loop_event_idx_ < loop_count_ && loop_[loop_event_idx_].play < loop_length_samples_)
-        {
-            emit(loop_[loop_event_idx_]);
-            ++loop_event_idx_;
-        }
+        advance_until(loop_, loop_event_idx_, loop_count_, loop_length_samples_);
         new_loop_pos -= loop_length_samples_;
         loop_event_idx_ = 0;
         rejitter_loop();
     }
 
-    while (loop_event_idx_ < loop_count_ && loop_[loop_event_idx_].play < new_loop_pos)
-    {
-        emit(loop_[loop_event_idx_]);
-        ++loop_event_idx_;
-    }
+    advance_until(loop_, loop_event_idx_, loop_count_, new_loop_pos);
 
     loop_pos_samples_ = new_loop_pos;
     return out;

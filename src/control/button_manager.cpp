@@ -70,24 +70,18 @@ bool ButtonManager::pop_pending(ButtonEvent& out)
     for (uint8_t i = 0; i < COUNT; ++i)
     {
         State& s = state_[i];
-        if (s.pend_press)
-        {
-            s.pend_press = false;
-            out          = {ButtonEventType::Press, i};
+
+        auto try_pop = [&](bool& pend, ButtonEventType t) -> bool {
+            if (!pend)
+                return false;
+            pend = false;
+            out  = {t, i};
             return true;
-        }
-        if (s.pend_long)
-        {
-            s.pend_long = false;
-            out         = {ButtonEventType::LongPress, i};
-            return true;
-        }
-        if (s.pend_release)
-        {
-            s.pend_release = false;
-            out            = {ButtonEventType::Release, i};
-            return true;
-        }
+        };
+
+        if (try_pop(s.pend_press,   ButtonEventType::Press))    return true;
+        if (try_pop(s.pend_long,    ButtonEventType::LongPress)) return true;
+        if (try_pop(s.pend_release, ButtonEventType::Release))   return true;
     }
     return false;
 }
