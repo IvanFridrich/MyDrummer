@@ -169,6 +169,71 @@ LedId led_for_sample(uint8_t sid)
     return (sid < static_cast<uint8_t>(SAMPLE_COUNT)) ? kSampleLed[sid] : LedId::LoopDrum;
 }
 
+static void handle_press(ButtonRole role, const ButtonEvent& ev)
+{
+    if (role == ButtonRole::ReverbToggle)
+    {
+        const bool now_on = !g_reverb->enabled();
+        if (now_on)
+            g_reverb->reset();
+        g_reverb->set_enabled(now_on);
+        g_leds->set_steady(LedId::Reverb, now_on);
+        LOG_I("REVERB", "%s", now_on ? "ON" : "OFF");
+    }
+    else if (role == ButtonRole::Looper)
+    {
+        if (g_auto->active())
+        {
+            g_auto->stop();
+            g_leds->set_steady(LedId::LoopDrum, false);
+        }
+        g_looper->on_button_short();
+    }
+    else if (role == ButtonRole::AutoDrumStyle)
+    {
+        g_looper->stop();
+        g_auto->next_style();
+        g_leds->set_steady(LedId::LoopDrum, g_auto->active());
+        LOG_I("AUTO", "style=%s speed=%s", style_name(g_auto->style()),
+              speed_name(g_auto->speed()));
+    }
+    else if (role == ButtonRole::AutoDrumSpeed)
+    {
+        g_auto->next_speed();
+        LOG_I("AUTO", "speed=%s", speed_name(g_auto->speed()));
+    }
+    else
+    {
+        const uint8_t sid = drum_sample_for(ev.index);
+        if (sid != INVALID_SAMPLE)
+        {
+            g_pool->trigger(sid);
+            g_leds->flash(led_for_button(ev.index));
+            g_looper->on_drum_hit(sid);
+        }
+    }
+}
+
+static void handle_long_press(ButtonRole role)
+{
+    if (role == ButtonRole::Looper)
+    {
+        g_looper->on_button_long();
+    }
+    else if (role == ButtonRole::AutoDrumStyle)
+    {
+        g_auto->stop();
+        g_leds->set_steady(LedId::LoopDrum, false);
+        LOG_I("AUTO", "stopped");
+    }
+    else if (role == ButtonRole::AutoDrumSpeed)
+    {
+        while (g_auto->speed() != 1)
+            g_auto->next_speed();
+        LOG_I("AUTO", "speed reset to normal");
+    }
+}
+
 void app_task(void*)
 {
     static int16_t buf[I2S_DMA_BUF_LEN]; // one DMA-slot-sized output buffer
@@ -190,71 +255,11 @@ void app_task(void*)
                 break;
             LOG_I("BTN", "%s idx=%u pin=%d", event_name(ev.type), static_cast<unsigned>(ev.index),
                   g_buttons->pin_of(ev.index));
+            const auto role = static_cast<ButtonRole>(ev.index);
             if (ev.type == ButtonEventType::Press)
-            {
-                const auto role = static_cast<ButtonRole>(ev.index);
-                if (role == ButtonRole::ReverbToggle)
-                {
-                    const bool now_on = !g_reverb->enabled();
-                    if (now_on)
-                        g_reverb->reset();
-                    g_reverb->set_enabled(now_on);
-                    g_leds->set_steady(LedId::Reverb, now_on);
-                    LOG_I("REVERB", "%s", now_on ? "ON" : "OFF");
-                }
-                else if (role == ButtonRole::Looper)
-                {
-                    if (g_auto->active())
-                    {
-                        g_auto->stop();
-                        g_leds->set_steady(LedId::LoopDrum, false);
-                    }
-                    g_looper->on_button_short();
-                }
-                else if (role == ButtonRole::AutoDrumStyle)
-                {
-                    g_looper->stop();
-                    g_auto->next_style();
-                    g_leds->set_steady(LedId::LoopDrum, g_auto->active());
-                    LOG_I("AUTO", "style=%s speed=%s", style_name(g_auto->style()),
-                          speed_name(g_auto->speed()));
-                }
-                else if (role == ButtonRole::AutoDrumSpeed)
-                {
-                    g_auto->next_speed();
-                    LOG_I("AUTO", "speed=%s", speed_name(g_auto->speed()));
-                }
-                else
-                {
-                    const uint8_t sid = drum_sample_for(ev.index);
-                    if (sid != INVALID_SAMPLE)
-                    {
-                        g_pool->trigger(sid);
-                        g_leds->flash(led_for_button(ev.index));
-                        g_looper->on_drum_hit(sid);
-                    }
-                }
-            }
+                handle_press(role, ev);
             else if (ev.type == ButtonEventType::LongPress)
-            {
-                const auto role = static_cast<ButtonRole>(ev.index);
-                if (role == ButtonRole::Looper)
-                {
-                    g_looper->on_button_long();
-                }
-                else if (role == ButtonRole::AutoDrumStyle)
-                {
-                    g_auto->stop();
-                    g_leds->set_steady(LedId::LoopDrum, false);
-                    LOG_I("AUTO", "stopped");
-                }
-                else if (role == ButtonRole::AutoDrumSpeed)
-                {
-                    while (g_auto->speed() != 1)
-                        g_auto->next_speed();
-                    LOG_I("AUTO", "speed reset to normal");
-                }
-            }
+                handle_long_press(role);
         }
 
         // 2. LED timers.

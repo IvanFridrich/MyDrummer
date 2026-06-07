@@ -247,6 +247,14 @@ size_t AutoDrummer::tick(uint32_t n_samples, uint8_t* trig, uint8_t* vel, size_t
 
     size_t out = 0;
 
+    auto emit = [&](const PatternEvent& ev) {
+        if (out >= max_trig)
+            return;
+        trig[out] = ev.note;
+        vel[out]  = humanizer_.humanize_velocity(ev.vel);
+        ++out;
+    };
+
     // --- Intro phase -------------------------------------------------------
     if (!in_loop_)
     {
@@ -254,12 +262,7 @@ size_t AutoDrummer::tick(uint32_t n_samples, uint8_t* trig, uint8_t* vel, size_t
 
         while (intro_event_idx_ < intro_count_ && intro_[intro_event_idx_].play < new_pos)
         {
-            if (out < max_trig)
-            {
-                trig[out] = intro_[intro_event_idx_].note;
-                vel[out]  = humanizer_.humanize_velocity(intro_[intro_event_idx_].vel);
-                ++out;
-            }
+            emit(intro_[intro_event_idx_]);
             ++intro_event_idx_;
         }
 
@@ -268,17 +271,11 @@ size_t AutoDrummer::tick(uint32_t n_samples, uint8_t* trig, uint8_t* vel, size_t
             in_loop_          = true;
             loop_pos_samples_ = new_pos - loop_start_sample_;
             loop_event_idx_   = 0;
-            rejitter_loop(); // fresh jitter for the first loop iteration
+            rejitter_loop();
 
-            // Fire any loop events that already fall within this chunk
             while (loop_event_idx_ < loop_count_ && loop_[loop_event_idx_].play < loop_pos_samples_)
             {
-                if (out < max_trig)
-                {
-                    trig[out] = loop_[loop_event_idx_].note;
-                    vel[out]  = humanizer_.humanize_velocity(loop_[loop_event_idx_].vel);
-                    ++out;
-                }
+                emit(loop_[loop_event_idx_]);
                 ++loop_event_idx_;
             }
         }
@@ -292,32 +289,19 @@ size_t AutoDrummer::tick(uint32_t n_samples, uint8_t* trig, uint8_t* vel, size_t
 
     if (new_loop_pos >= loop_length_samples_)
     {
-        // Fire remaining events up to the loop boundary
         while (loop_event_idx_ < loop_count_ && loop_[loop_event_idx_].play < loop_length_samples_)
         {
-            if (out < max_trig)
-            {
-                trig[out] = loop_[loop_event_idx_].note;
-                vel[out]  = humanizer_.humanize_velocity(loop_[loop_event_idx_].vel);
-                ++out;
-            }
+            emit(loop_[loop_event_idx_]);
             ++loop_event_idx_;
         }
-        // Wrap → new iteration gets a fresh set of jittered fire times.
         new_loop_pos -= loop_length_samples_;
         loop_event_idx_ = 0;
         rejitter_loop();
     }
 
-    // Fire events in the remainder of the chunk
     while (loop_event_idx_ < loop_count_ && loop_[loop_event_idx_].play < new_loop_pos)
     {
-        if (out < max_trig)
-        {
-            trig[out] = loop_[loop_event_idx_].note;
-            vel[out]  = humanizer_.humanize_velocity(loop_[loop_event_idx_].vel);
-            ++out;
-        }
+        emit(loop_[loop_event_idx_]);
         ++loop_event_idx_;
     }
 

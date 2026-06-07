@@ -96,49 +96,50 @@ ButtonEvent ButtonManager::poll()
 {
     const uint32_t now = clock_->millis();
 
+    auto on_debounce_change = [&](State& s, bool target_pressed) {
+        s.debounced_pressed = target_pressed;
+        if (target_pressed)
+        {
+            s.press_started_ms = now;
+            s.long_press_fired = false;
+            s.pend_press       = true;
+        }
+        else
+        {
+            s.pend_release = true;
+        }
+    };
+
+    auto check_long_press = [&](State& s) {
+        if (!s.debounced_pressed || s.long_press_fired)
+            return;
+        if ((now - s.press_started_ms) < static_cast<uint32_t>(BUTTON_LONGPRESS_MS))
+            return;
+        s.long_press_fired = true;
+        s.pend_long        = true;
+    };
+
     for (uint8_t i = 0; i < COUNT; ++i)
     {
-        State& s = state_[i];
-
+        State&     s   = state_[i];
         const bool raw = gpio_->read(pins_[i]);
+
         if (raw != s.raw_level)
         {
             s.raw_level      = raw;
             s.last_change_ms = now;
         }
 
-        const bool stable = (now - s.last_change_ms) >= static_cast<uint32_t>(BUTTON_DEBOUNCE_MS);
+        const bool stable         = (now - s.last_change_ms) >= static_cast<uint32_t>(BUTTON_DEBOUNCE_MS);
         const bool target_pressed = pin_to_pressed(s.raw_level);
 
         if (stable && target_pressed != s.debounced_pressed)
-        {
-            s.debounced_pressed = target_pressed;
-            if (target_pressed)
-            {
-                s.press_started_ms = now;
-                s.long_press_fired = false;
-                s.pend_press       = true;
-            }
-            else
-            {
-                s.pend_release = true;
-            }
-        }
+            on_debounce_change(s, target_pressed);
 
-        // Long-press detection: while held, after BUTTON_LONGPRESS_MS since
-        // the debounced press began, fire LongPress exactly once.
-        if (s.debounced_pressed && !s.long_press_fired)
-        {
-            const uint32_t held = now - s.press_started_ms;
-            if (held >= static_cast<uint32_t>(BUTTON_LONGPRESS_MS))
-            {
-                s.long_press_fired = true;
-                s.pend_long        = true;
-            }
-        }
+        check_long_press(s);
     }
 
-    ButtonEvent ev {ButtonEventType::None, 0};
+    ButtonEvent ev{ButtonEventType::None, 0};
     pop_pending(ev);
     return ev;
 }

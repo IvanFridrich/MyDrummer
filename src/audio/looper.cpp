@@ -78,38 +78,28 @@ size_t Looper::tick(uint32_t n, uint8_t* out, size_t max_out)
     size_t         count      = 0;
     const uint32_t window_end = play_pos_ + n;
 
-    if (window_end < loop_length_)
-    {
-        // No wrap: emit events whose timestamp falls in [play_pos_, window_end).
+    auto emit_until = [&](uint32_t limit) {
         while (play_idx_ < event_count_ && count < max_out)
         {
-            if (events_[play_idx_].time_samples >= window_end)
+            if (events_[play_idx_].time_samples >= limit)
                 break;
             out[count++] = events_[play_idx_].sample_id;
             ++play_idx_;
         }
+    };
+
+    if (window_end < loop_length_)
+    {
+        emit_until(window_end);
         play_pos_ = window_end;
     }
     else
     {
-        // Wrap: emit tail [play_pos_, loop_length_), then head [0, new_pos).
-        while (play_idx_ < event_count_ && count < max_out)
-        {
-            if (events_[play_idx_].time_samples >= loop_length_)
-                break;
-            out[count++] = events_[play_idx_].sample_id;
-            ++play_idx_;
-        }
+        emit_until(loop_length_);
         const uint32_t new_pos = window_end - loop_length_;
         play_pos_              = 0;
         play_idx_              = 0;
-        while (play_idx_ < event_count_ && count < max_out)
-        {
-            if (events_[play_idx_].time_samples >= new_pos)
-                break;
-            out[count++] = events_[play_idx_].sample_id;
-            ++play_idx_;
-        }
+        emit_until(new_pos);
         play_pos_ = new_pos;
     }
 
