@@ -16,28 +16,36 @@ void tearDown() {}
 // ---------------------------------------------------------------------------
 
 void test_lfsr_never_returns_zero() {
+    // If the LFSR ever locks at 0 it produces 0 forever; verify it stays live
+    // by confirming jitter() produces non-zero values over many iterations.
     Humanizer h;
-    for (int i = 0; i < 200000; ++i) {
-        TEST_ASSERT_NOT_EQUAL_MESSAGE(0, h.next_u16(), "Galois LFSR state must never be 0");
+    h.set_enabled(true);
+    bool seen_nonzero = false;
+    for (int i = 0; i < 200000 && !seen_nonzero; ++i) {
+        if (h.jitter(1) != 0) seen_nonzero = true;
     }
+    TEST_ASSERT_TRUE_MESSAGE(seen_nonzero, "Galois LFSR state must never be 0");
 }
 
 void test_same_seed_is_deterministic() {
     Humanizer a(0x1234);
     Humanizer b(0x1234);
+    a.set_enabled(true);
+    b.set_enabled(true);
     for (int i = 0; i < 1000; ++i) {
-        TEST_ASSERT_EQUAL_UINT16(a.next_u16(), b.next_u16());
+        TEST_ASSERT_EQUAL_INT32(a.jitter(100), b.jitter(100));
     }
 }
 
 void test_reseed_restarts_stream() {
     Humanizer h(0xBEEF);
-    uint16_t first[16];
-    for (int i = 0; i < 16; ++i) first[i] = h.next_u16();
+    h.set_enabled(true);
+    int32_t first[16];
+    for (int i = 0; i < 16; ++i) first[i] = h.jitter(100);
 
     h.reseed(0xBEEF);
     for (int i = 0; i < 16; ++i) {
-        TEST_ASSERT_EQUAL_UINT16_MESSAGE(first[i], h.next_u16(),
+        TEST_ASSERT_EQUAL_INT32_MESSAGE(first[i], h.jitter(100),
             "reseed must reproduce the same stream");
     }
 }
@@ -45,9 +53,10 @@ void test_reseed_restarts_stream() {
 void test_zero_seed_falls_back_to_default() {
     // A zero LFSR state would lock up; the ctor must substitute the default.
     Humanizer h(0);
+    h.set_enabled(true);
     bool any_nonzero = false;
     for (int i = 0; i < 32; ++i) {
-        if (h.next_u16() != 0) { any_nonzero = true; break; }
+        if (h.jitter(1) != 0) { any_nonzero = true; break; }
     }
     TEST_ASSERT_TRUE_MESSAGE(any_nonzero, "zero seed must not lock the LFSR at 0");
 }

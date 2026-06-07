@@ -29,9 +29,6 @@ struct IGpio {
 struct II2s {
     virtual ~II2s() = default;
     virtual bool init(int sample_rate, int bclk, int lrck, int dout) = 0;
-    // Writes up to `samples` 16-bit mono samples; returns count actually written
-    // (0 = DMA full). Never blocks.
-    virtual size_t write_nonblocking(const int16_t* buf, size_t samples) = 0;
     // Blocks until all `samples` are accepted by the DMA ring (portMAX_DELAY on
     // ESP32; instant capture in native tests). Use this from the audio task.
     virtual void write(const int16_t* buf, size_t samples) = 0;

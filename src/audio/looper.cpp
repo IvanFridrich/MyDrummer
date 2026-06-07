@@ -9,8 +9,7 @@ Looper::Looper()
       record_pos_(0),
       play_pos_(0),
       loop_length_(0),
-      play_idx_(0),
-      overflow_(false) {}
+      play_idx_(0) {}
 
 void Looper::on_button_short() {
     switch (state_) {
@@ -43,7 +42,6 @@ void Looper::on_drum_hit(uint8_t sample_id) {
     if (state_ == LooperState::Arming) {
         record_pos_  = 0;
         event_count_ = 0;
-        overflow_    = false;
         state_       = LooperState::Recording;
         LOG_I("LOOPER", "Recording started");
         store_event(sample_id);
@@ -81,6 +79,7 @@ size_t Looper::tick(uint32_t n, uint8_t* out, size_t max_out) {
     } else {
         // Wrap: emit tail [play_pos_, loop_length_), then head [0, new_pos).
         while (play_idx_ < event_count_ && count < max_out) {
+            if (events_[play_idx_].time_samples >= loop_length_) break;
             out[count++] = events_[play_idx_].sample_id;
             ++play_idx_;
         }
@@ -105,13 +104,10 @@ void Looper::stop() {
     play_pos_    = 0;
     loop_length_ = 0;
     play_idx_    = 0;
-    overflow_    = false;
 }
 
 void Looper::store_event(uint8_t sample_id) {
-    if (overflow_) return;
     if (event_count_ >= LOOPER_MAX_EVENTS) {
-        overflow_ = true;
         LOG_W("LOOPER", "event buffer full");
         return;
     }

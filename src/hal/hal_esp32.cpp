@@ -70,21 +70,6 @@ class Esp32I2s : public II2s {
         return true;
     }
 
-    size_t write_nonblocking(const int16_t* buf, size_t samples) override {
-        if (samples > static_cast<size_t>(I2S_DMA_BUF_LEN))
-            samples = static_cast<size_t>(I2S_DMA_BUF_LEN);
-
-        uint32_t frames[I2S_DMA_BUF_LEN * 2];
-        to_i2s_frames(buf, samples, frames);
-
-        size_t bytes_written = 0;
-        const esp_err_t err = i2s_write(I2S_NUM, frames,
-                                        samples * 2 * sizeof(uint32_t),
-                                        &bytes_written, /*ticks_to_wait=*/0);
-        if (err != ESP_OK) return 0;
-        return bytes_written / (2 * sizeof(uint32_t));
-    }
-
     void write(const int16_t* buf, size_t samples) override {
         if (samples > static_cast<size_t>(I2S_DMA_BUF_LEN))
             samples = static_cast<size_t>(I2S_DMA_BUF_LEN);

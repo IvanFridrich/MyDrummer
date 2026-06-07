@@ -65,18 +65,19 @@ class AutoDrummer {
     AutoStyle style_;
     uint8_t   speed_idx_;   // 0=slow 1=normal 2=fast
 
-    // Pre-computed sample positions built by load_pattern().
-    uint32_t  intro_times_[kMaxIntro];   // absolute sample time (base, un-jittered)
-    uint32_t  intro_play_[kMaxIntro];    // jittered fire time used by tick()
-    uint8_t   intro_notes_[kMaxIntro];   // SampleId (uint8_t)
-    uint8_t   intro_vels_[kMaxIntro];    // base MIDI velocity (1-127)
-    uint16_t  intro_count_;
+    struct PatternEvent {
+        uint32_t time;   // base time (absolute for intro, offset-from-loop-start for loop)
+        uint32_t play;   // jittered fire time used by tick()
+        uint8_t  note;   // SampleId
+        uint8_t  vel;    // base MIDI velocity (1-127)
+    };
 
-    uint32_t  loop_times_[kMaxLoop];     // sample offset from loop start (base)
-    uint32_t  loop_play_[kMaxLoop];      // jittered fire time used by tick()
-    uint8_t   loop_notes_[kMaxLoop];     // SampleId
-    uint8_t   loop_vels_[kMaxLoop];      // base MIDI velocity (1-127)
-    uint16_t  loop_count_;
+    // Pre-computed sample positions built by load_pattern().
+    PatternEvent intro_[kMaxIntro];
+    uint16_t     intro_count_;
+
+    PatternEvent loop_[kMaxLoop];
+    uint16_t     loop_count_;
 
     uint32_t  loop_start_sample_;        // absolute sample where loop begins
     uint32_t  loop_length_samples_;      // length of one loop iteration

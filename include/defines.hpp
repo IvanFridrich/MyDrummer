@@ -29,7 +29,11 @@
 #define ENABLE_END_RAMP             1
 #define VOICE_END_RAMP_SAMPLES      64       // linear taper to zero on natural end
 
-// Per-voice trigger gain. Spec §2 calls for full-scale output (32767) with
+// ===== Audio math =====
+#define MIDI_VELOCITY_MAX           127
+#define Q15_UNITY                   32767    // Q15 full-scale (1.0 - 1 LSB)
+
+// Per-voice trigger gain. Spec §2 calls for full-scale output (Q15_UNITY) with
 // the analog pot doing the volume work. Until the pot is wired, lower this
 // to attenuate in software — try 16384 (-6 dB) or 8192 (-12 dB) if your
 // listening device's input is clipping the PCM5102's 2 Vrms peak.
@@ -46,6 +50,7 @@
 // ===== Looper =====
 #define LOOPER_MAX_EVENTS           128
 #define LOOPER_MAX_DURATION_S       60
+#define MAX_CONCURRENT_TRIG         16   // max triggers fired in one AUDIO_CHUNK tick
 
 // ===== Buttons =====
 #define BUTTON_COUNT                7

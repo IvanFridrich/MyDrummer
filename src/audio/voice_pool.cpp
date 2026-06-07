@@ -35,8 +35,8 @@ void VoicePool::trigger(uint8_t sample_id, uint8_t velocity) {
         }
     }
     voices_[slot].start(sample_id, ++next_seq_);
-    if (velocity > 127) velocity = 127;
-    const int32_t gain = (static_cast<int32_t>(MASTER_VOLUME_Q15) * velocity) / 127;
+    if (velocity > MIDI_VELOCITY_MAX) velocity = MIDI_VELOCITY_MAX;
+    const int32_t gain = (static_cast<int32_t>(MASTER_VOLUME_Q15) * velocity) / MIDI_VELOCITY_MAX;
     voices_[slot].gain_q15 = static_cast<int16_t>(gain);
 }
 

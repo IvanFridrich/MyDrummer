@@ -37,15 +37,6 @@ bool NativeI2s::init(int sample_rate, int bclk, int lrck, int dout) {
     return true;
 }
 
-size_t NativeI2s::write_nonblocking(const int16_t* buf, size_t samples) {
-    if (capacity_ > 0) {
-        size_t room = capacity_ > captured_.size() ? capacity_ - captured_.size() : 0;
-        if (samples > room) samples = room;
-    }
-    captured_.insert(captured_.end(), buf, buf + samples);
-    return samples;
-}
-
 void NativeI2s::write(const int16_t* buf, size_t samples) {
     captured_.insert(captured_.end(), buf, buf + samples);
 }

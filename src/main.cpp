@@ -61,7 +61,8 @@ AutoDrummer*   g_auto    = nullptr;
 
 constexpr uint8_t INVALID_SAMPLE = 0xFF;
 
-[[maybe_unused]] static const char* style_name(AutoStyle s) {
+#if LOG_LEVEL >= 3
+static const char* style_name(AutoStyle s) {
     switch (s) {
         case AutoStyle::Blues:    return "Blues";
         case AutoStyle::Jazz:     return "Jazz";
@@ -73,7 +74,7 @@ constexpr uint8_t INVALID_SAMPLE = 0xFF;
     }
 }
 
-[[maybe_unused]] static const char* speed_name(uint8_t idx) {
+static const char* speed_name(uint8_t idx) {
     switch (idx) {
         case 0:  return "slow";
         case 2:  return "fast";
@@ -81,7 +82,7 @@ constexpr uint8_t INVALID_SAMPLE = 0xFF;
     }
 }
 
-[[maybe_unused]] const char* event_name(ButtonEventType t) {
+static const char* event_name(ButtonEventType t) {
     switch (t) {
         case ButtonEventType::Press:     return "PRESS";
         case ButtonEventType::Release:   return "RELEASE";
@@ -89,40 +90,57 @@ constexpr uint8_t INVALID_SAMPLE = 0xFF;
         default:                         return "?";
     }
 }
+#endif
+
+// Button index → drum sample (INVALID_SAMPLE for non-drum buttons)
+static constexpr uint8_t kButtonSample[BUTTON_COUNT] = {
+    static_cast<uint8_t>(SampleId::SAMPLE_KICK),       // Kick
+    static_cast<uint8_t>(SampleId::SAMPLE_SNARE),      // Snare
+    static_cast<uint8_t>(SampleId::SAMPLE_HIHAT_OPEN), // HihatOpen
+    INVALID_SAMPLE,                                     // ReverbToggle
+    INVALID_SAMPLE,                                     // Looper
+    INVALID_SAMPLE,                                     // AutoDrumStyle
+    INVALID_SAMPLE,                                     // AutoDrumSpeed
+};
+
+// Button index → LED
+static constexpr LedId kButtonLed[BUTTON_COUNT] = {
+    LedId::Kick,     // Kick
+    LedId::Snare,    // Snare
+    LedId::Hihat,    // HihatOpen
+    LedId::LoopDrum, // ReverbToggle
+    LedId::LoopDrum, // Looper
+    LedId::LoopDrum, // AutoDrumStyle
+    LedId::LoopDrum, // AutoDrumSpeed
+};
+
+// SampleId → LED (indexed by SampleId enum value)
+static constexpr LedId kSampleLed[static_cast<uint8_t>(SAMPLE_COUNT)] = {
+    LedId::Kick,     // SAMPLE_KICK
+    LedId::Snare,    // SAMPLE_SNARE
+    LedId::Snare,    // SAMPLE_TOM_HI
+    LedId::Snare,    // SAMPLE_TOM_MID
+    LedId::Snare,    // SAMPLE_TOM_LO
+    LedId::Hihat,    // SAMPLE_HIHAT_CLOSED
+    LedId::Hihat,    // SAMPLE_HIHAT_OPEN
+    LedId::Hihat,    // SAMPLE_HIHAT_PEDAL
+    LedId::Hihat,    // SAMPLE_CRASH
+    LedId::Hihat,    // SAMPLE_RIDE
+    LedId::Kick,     // SAMPLE_STICKS
+    LedId::LoopDrum, // SAMPLE_COWBELL
+    LedId::LoopDrum, // SAMPLE_TAMBOURINE
+};
 
 uint8_t drum_sample_for(uint8_t idx) {
-    switch (static_cast<ButtonRole>(idx)) {
-        case ButtonRole::Kick:      return static_cast<uint8_t>(SampleId::SAMPLE_KICK);
-        case ButtonRole::Snare:     return static_cast<uint8_t>(SampleId::SAMPLE_SNARE);
-        case ButtonRole::HihatOpen: return static_cast<uint8_t>(SampleId::SAMPLE_HIHAT_OPEN);
-        default:                    return INVALID_SAMPLE;
-    }
+    return (idx < BUTTON_COUNT) ? kButtonSample[idx] : INVALID_SAMPLE;
 }
 
 LedId led_for_button(uint8_t idx) {
-    switch (static_cast<ButtonRole>(idx)) {
-        case ButtonRole::Kick:      return LedId::Kick;
-        case ButtonRole::Snare:     return LedId::Snare;
-        case ButtonRole::HihatOpen: return LedId::Hihat;
-        default:                    return LedId::LoopDrum;
-    }
+    return (idx < BUTTON_COUNT) ? kButtonLed[idx] : LedId::LoopDrum;
 }
 
 LedId led_for_sample(uint8_t sid) {
-    switch (static_cast<SampleId>(sid)) {
-        case SampleId::SAMPLE_KICK:          return LedId::Kick;
-        case SampleId::SAMPLE_STICKS:        return LedId::Kick;
-        case SampleId::SAMPLE_SNARE:         return LedId::Snare;
-        case SampleId::SAMPLE_TOM_HI:        return LedId::Snare;
-        case SampleId::SAMPLE_TOM_MID:       return LedId::Snare;
-        case SampleId::SAMPLE_TOM_LO:        return LedId::Snare;
-        case SampleId::SAMPLE_HIHAT_CLOSED:  return LedId::Hihat;
-        case SampleId::SAMPLE_HIHAT_OPEN:    return LedId::Hihat;
-        case SampleId::SAMPLE_HIHAT_PEDAL:   return LedId::Hihat;
-        case SampleId::SAMPLE_CRASH:         return LedId::Hihat;
-        case SampleId::SAMPLE_RIDE:          return LedId::Hihat;
-        default:                             return LedId::LoopDrum;
-    }
+    return (sid < static_cast<uint8_t>(SAMPLE_COUNT)) ? kSampleLed[sid] : LedId::LoopDrum;
 }
 
 void app_task(void*) {
@@ -196,17 +214,16 @@ void app_task(void*) {
         // 3+5. Two AUDIO_CHUNK halves → fill the full DMA buffer.
         //      Scheduler and mixer are ticked per half so event timing stays
         //      accurate at AUDIO_CHUNK granularity.
-        constexpr size_t kMaxTrig = 16;
         for (int half = 0; half < 2; ++half) {
-            uint8_t trig[kMaxTrig];
-            uint8_t vel[kMaxTrig];
+            uint8_t trig[MAX_CONCURRENT_TRIG];
+            uint8_t vel[MAX_CONCURRENT_TRIG];
             // Looper wins when active; its live hits play at full velocity.
             // Auto-drummer supplies per-hit (humanized) velocities.
-            size_t fired = g_looper->tick(AUDIO_CHUNK, trig, kMaxTrig);
+            size_t fired = g_looper->tick(AUDIO_CHUNK, trig, MAX_CONCURRENT_TRIG);
             const bool from_auto = (fired == 0);
-            if (from_auto) fired = g_auto->tick(AUDIO_CHUNK, trig, vel, kMaxTrig);
+            if (from_auto) fired = g_auto->tick(AUDIO_CHUNK, trig, vel, MAX_CONCURRENT_TRIG);
             for (size_t i = 0; i < fired; ++i) {
-                g_pool->trigger(trig[i], from_auto ? vel[i] : static_cast<uint8_t>(127));
+                g_pool->trigger(trig[i], from_auto ? vel[i] : static_cast<uint8_t>(MIDI_VELOCITY_MAX));
                 g_leds->flash(led_for_sample(trig[i]));
                 g_leds->flash(LedId::LoopDrum);
             }

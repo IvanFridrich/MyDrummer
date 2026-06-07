@@ -61,7 +61,6 @@ class Looper {
     uint32_t    play_pos_;     // playhead offset within loop, during Playing
     uint32_t    loop_length_;  // loop duration in samples
     uint16_t    play_idx_;     // index of next event to emit
-    bool        overflow_;     // true after event buffer filled
 };
 
 }} // namespace dummer::audio

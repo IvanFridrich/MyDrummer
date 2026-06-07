@@ -23,9 +23,6 @@ class Humanizer {
     // (an all-zero LFSR state would lock up).
     void reseed(uint16_t seed);
 
-    // Advance the LFSR and return the new 16-bit state (never 0).
-    uint16_t next_u16();
-
     // Symmetric jitter in [-range, +range]. Returns 0 when disabled or range<=0.
     int32_t jitter(int32_t range);
 
@@ -33,6 +30,9 @@ class Humanizer {
     uint8_t humanize_velocity(uint8_t base_vel);
 
   private:
+    // Advance the LFSR and return the new 16-bit state (never 0).
+    uint16_t next_u16();
+
     uint16_t state_;
     bool     enabled_;
 };

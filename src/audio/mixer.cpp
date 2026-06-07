@@ -40,10 +40,9 @@ void Mixer::get_samples(int16_t* dst, size_t n) {
 #if ENABLE_END_RAMP
             // Universal end-ramp: linear taper over the last
             // VOICE_END_RAMP_SAMPLES to mask non-zero-ending WAVs.
-            // ramp_q15 = samples_left * (32768 / 64) = samples_left << 9.
             if (vc.position >= end_ramp_start) {
                 const int32_t samples_left = static_cast<int32_t>(d.length - vc.position);
-                const int32_t ramp_q15 = samples_left << 9;
+                const int32_t ramp_q15 = samples_left * (32768 / VOICE_END_RAMP_SAMPLES);
                 voiced = (voiced * ramp_q15) >> 15;
             }
 #endif

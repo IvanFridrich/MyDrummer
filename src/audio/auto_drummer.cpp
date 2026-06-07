@@ -2,6 +2,7 @@
 #include "audio/auto_drummer.hpp"
 #include "patterns.hpp"
 #include "samples.hpp"
+#include "util/log.hpp"
 
 #include <string.h>   // memset
 
@@ -61,14 +62,8 @@ AutoDrummer::AutoDrummer()
     , loop_event_idx_(0)
     , humanizer_()
 {
-    memset(intro_times_, 0, sizeof(intro_times_));
-    memset(intro_play_,  0, sizeof(intro_play_));
-    memset(intro_notes_, 0, sizeof(intro_notes_));
-    memset(intro_vels_,  0, sizeof(intro_vels_));
-    memset(loop_times_,  0, sizeof(loop_times_));
-    memset(loop_play_,   0, sizeof(loop_play_));
-    memset(loop_notes_,  0, sizeof(loop_notes_));
-    memset(loop_vels_,   0, sizeof(loop_vels_));
+    memset(intro_, 0, sizeof(intro_));
+    memset(loop_,  0, sizeof(loop_));
 }
 
 // ---------------------------------------------------------------------------
@@ -101,18 +96,22 @@ void AutoDrummer::load_pattern() {
 
         if (ev.tick < pat.loop_start_tick) {
             if (intro_count_ < kMaxIntro) {
-                intro_times_[intro_count_] = static_cast<uint32_t>(ev.tick * spt + 0.5f);
-                intro_notes_[intro_count_] = sid;
-                intro_vels_[intro_count_]  = ev.vel;
+                intro_[intro_count_].time = static_cast<uint32_t>(ev.tick * spt + 0.5f);
+                intro_[intro_count_].note = sid;
+                intro_[intro_count_].vel  = ev.vel;
                 ++intro_count_;
+            } else {
+                LOG_W("AUTO", "intro event cap (%u) exceeded; note dropped", kMaxIntro);
             }
         } else {
             if (loop_count_ < kMaxLoop) {
                 const uint32_t offset = ev.tick - pat.loop_start_tick;
-                loop_times_[loop_count_] = static_cast<uint32_t>(offset * spt + 0.5f);
-                loop_notes_[loop_count_] = sid;
-                loop_vels_[loop_count_]  = ev.vel;
+                loop_[loop_count_].time = static_cast<uint32_t>(offset * spt + 0.5f);
+                loop_[loop_count_].note = sid;
+                loop_[loop_count_].vel  = ev.vel;
                 ++loop_count_;
+            } else {
+                LOG_W("AUTO", "loop event cap (%u) exceeded; note dropped", kMaxLoop);
             }
         }
     }
@@ -143,12 +142,12 @@ void AutoDrummer::rejitter_intro() {
     const uint32_t hi = (loop_start_sample_ > 0) ? loop_start_sample_ - 1u : 0u;
     uint32_t prev = 0;
     for (uint16_t i = 0; i < intro_count_; ++i) {
-        int64_t t = static_cast<int64_t>(intro_times_[i])
+        int64_t t = static_cast<int64_t>(intro_[i].time)
                   + humanizer_.jitter(HUMANIZE_TIME_SAMPLES);
         if (t < static_cast<int64_t>(prev)) t = static_cast<int64_t>(prev);
         if (t > static_cast<int64_t>(hi))   t = static_cast<int64_t>(hi);
-        intro_play_[i] = static_cast<uint32_t>(t);
-        prev = intro_play_[i];
+        intro_[i].play = static_cast<uint32_t>(t);
+        prev = intro_[i].play;
     }
 }
 
@@ -156,12 +155,12 @@ void AutoDrummer::rejitter_loop() {
     const uint32_t hi = (loop_length_samples_ > 0) ? loop_length_samples_ - 1u : 0u;
     uint32_t prev = 0;
     for (uint16_t i = 0; i < loop_count_; ++i) {
-        int64_t t = static_cast<int64_t>(loop_times_[i])
+        int64_t t = static_cast<int64_t>(loop_[i].time)
                   + humanizer_.jitter(HUMANIZE_TIME_SAMPLES);
         if (t < static_cast<int64_t>(prev)) t = static_cast<int64_t>(prev);
         if (t > static_cast<int64_t>(hi))   t = static_cast<int64_t>(hi);
-        loop_play_[i] = static_cast<uint32_t>(t);
-        prev = loop_play_[i];
+        loop_[i].play = static_cast<uint32_t>(t);
+        prev = loop_[i].play;
     }
 }
 
@@ -204,10 +203,10 @@ size_t AutoDrummer::tick(uint32_t n_samples, uint8_t* trig, uint8_t* vel, size_t
         const uint32_t new_pos = pos_samples_ + n_samples;
 
         while (intro_event_idx_ < intro_count_ &&
-               intro_play_[intro_event_idx_] < new_pos) {
+               intro_[intro_event_idx_].play < new_pos) {
             if (out < max_trig) {
-                trig[out] = intro_notes_[intro_event_idx_];
-                vel[out]  = humanizer_.humanize_velocity(intro_vels_[intro_event_idx_]);
+                trig[out] = intro_[intro_event_idx_].note;
+                vel[out]  = humanizer_.humanize_velocity(intro_[intro_event_idx_].vel);
                 ++out;
             }
             ++intro_event_idx_;
@@ -221,10 +220,10 @@ size_t AutoDrummer::tick(uint32_t n_samples, uint8_t* trig, uint8_t* vel, size_t
 
             // Fire any loop events that already fall within this chunk
             while (loop_event_idx_ < loop_count_ &&
-                   loop_play_[loop_event_idx_] < loop_pos_samples_) {
+                   loop_[loop_event_idx_].play < loop_pos_samples_) {
                 if (out < max_trig) {
-                    trig[out] = loop_notes_[loop_event_idx_];
-                    vel[out]  = humanizer_.humanize_velocity(loop_vels_[loop_event_idx_]);
+                    trig[out] = loop_[loop_event_idx_].note;
+                    vel[out]  = humanizer_.humanize_velocity(loop_[loop_event_idx_].vel);
                     ++out;
                 }
                 ++loop_event_idx_;
@@ -241,10 +240,10 @@ size_t AutoDrummer::tick(uint32_t n_samples, uint8_t* trig, uint8_t* vel, size_t
     if (new_loop_pos >= loop_length_samples_) {
         // Fire remaining events up to the loop boundary
         while (loop_event_idx_ < loop_count_ &&
-               loop_play_[loop_event_idx_] < loop_length_samples_) {
+               loop_[loop_event_idx_].play < loop_length_samples_) {
             if (out < max_trig) {
-                trig[out] = loop_notes_[loop_event_idx_];
-                vel[out]  = humanizer_.humanize_velocity(loop_vels_[loop_event_idx_]);
+                trig[out] = loop_[loop_event_idx_].note;
+                vel[out]  = humanizer_.humanize_velocity(loop_[loop_event_idx_].vel);
                 ++out;
             }
             ++loop_event_idx_;
@@ -257,10 +256,10 @@ size_t AutoDrummer::tick(uint32_t n_samples, uint8_t* trig, uint8_t* vel, size_t
 
     // Fire events in the remainder of the chunk
     while (loop_event_idx_ < loop_count_ &&
-           loop_play_[loop_event_idx_] < new_loop_pos) {
+           loop_[loop_event_idx_].play < new_loop_pos) {
         if (out < max_trig) {
-            trig[out] = loop_notes_[loop_event_idx_];
-            vel[out]  = humanizer_.humanize_velocity(loop_vels_[loop_event_idx_]);
+            trig[out] = loop_[loop_event_idx_].note;
+            vel[out]  = humanizer_.humanize_velocity(loop_[loop_event_idx_].vel);
             ++out;
         }
         ++loop_event_idx_;

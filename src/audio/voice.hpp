@@ -5,6 +5,7 @@
 // retrigger fade-out (and, later, the end-of-sample ramp) inside Mixer.
 #pragma once
 
+#include "defines.hpp"
 #include "samples.hpp"
 
 #include <stdint.h>
@@ -31,7 +32,7 @@ struct Voice {
     void start(uint8_t sid, uint32_t seq) {
         sample_id   = sid;
         position    = 0;
-        gain_q15    = 32767;
+        gain_q15    = Q15_UNITY;
         fade        = FadeState::None;
         trigger_seq = seq;
     }
