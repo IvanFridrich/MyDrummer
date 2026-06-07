@@ -1,6 +1,6 @@
 // AutoDrummer — MIDI-pattern-based drum machine with 6 styles.
 //
-// Styles cycle: Off → Blues → Jazz → Funk → Reggae → Gospel → HardRock → Off.
+// Styles cycle: Off → Blues → Country → Jazz → Funk → Reggae → Gospel → HardRock → Off.
 // Each style has three BPM tiers (slow/normal/fast); speed cycles independently.
 //
 // tick() advances the internal clock and emits sample IDs into the caller's
@@ -19,12 +19,13 @@ namespace dummer { namespace audio {
 enum class AutoStyle : uint8_t {
     Off      = 0,
     Blues    = 1,
-    Jazz     = 2,
-    Funk     = 3,
-    Reggae   = 4,
-    Gospel   = 5,
-    HardRock = 6,
-    COUNT    = 7,
+    Country  = 2,
+    Jazz     = 3,
+    Funk     = 4,
+    Reggae   = 5,
+    Gospel   = 6,
+    HardRock = 7,
+    COUNT    = 8,
 };
 
 class AutoDrummer {
@@ -32,7 +33,7 @@ class AutoDrummer {
     AutoDrummer();
 
     // Cycle to next style. Restarts playback from the count-in.
-    // Off → Blues → Jazz → Funk → Reggae → Gospel → HardRock → Off.
+    // Off → Blues → Country → Jazz → Funk → Reggae → Gospel → HardRock → Off.
     void next_style();
 
     // Cycle to next BPM tier (slow → normal → fast → slow).

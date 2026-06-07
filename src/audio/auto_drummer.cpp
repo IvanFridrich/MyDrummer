@@ -12,8 +12,9 @@ namespace dummer { namespace audio {
 // BPM table: indexed by [style-1][speed_idx] (style 0 = Off, excluded)
 // ---------------------------------------------------------------------------
 
-static constexpr uint16_t kBpmTable[6][3] = {
+static constexpr uint16_t kBpmTable[7][3] = {
     {  70,  90, 110 },   // Blues
+    {  85, 100, 120 },   // Country
     {  80, 120, 160 },   // Jazz
     {  80, 100, 120 },   // Funk
     {  65,  80,  95 },   // Reggae

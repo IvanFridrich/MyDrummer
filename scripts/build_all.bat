@@ -14,6 +14,12 @@ if exist scripts\wav_to_cpp.py (
     if errorlevel 1 goto :fail
 )
 
+if exist scripts\gen_patterns.py (
+    echo === gen_patterns.py ===
+    python scripts\gen_patterns.py
+    if errorlevel 1 goto :fail
+)
+
 if exist scripts\midi_to_cpp.py (
     echo === midi_to_cpp.py ===
     python scripts\midi_to_cpp.py

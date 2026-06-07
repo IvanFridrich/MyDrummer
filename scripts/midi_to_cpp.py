@@ -123,7 +123,7 @@ def emit_cpp(patterns: list, out_dir: Path) -> None:
         '    const char*      name;',
         '};',
         '',
-        'constexpr uint8_t PATTERN_COUNT = 6;',
+        'constexpr uint8_t PATTERN_COUNT = 7;',
         'extern const PatternInfo kDrumPatterns[PATTERN_COUNT];',
         '',
         '}} // namespace dummer::audio',
@@ -168,7 +168,7 @@ def main() -> None:
     out_dir = repo / 'generated'
     out_dir.mkdir(exist_ok=True)
 
-    NAMES = ['blues', 'jazz', 'funk', 'reggae', 'gospel', 'hardrock']
+    NAMES = ['blues', 'country', 'jazz', 'funk', 'reggae', 'gospel', 'hardrock']
     patterns = []
 
     print('midi_to_cpp: parsing patterns')

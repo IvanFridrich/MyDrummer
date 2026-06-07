@@ -56,5 +56,5 @@ LOOP_START marker at tick 1920 (bar 1) — bar 0 is the stick count-in; loop run
 | 3 | Retrigger fade + end ramp | ✅ |
 | 4 | Reverb | ✅ |
 | 5 | Looper FSM | ✅ |
-| 6 | Auto-drummer (6 styles) | ✅ |
+| 6 | Auto-drummer (7 styles: Blues, Country, Jazz, Funk, Reggae, Gospel, HardRock) | ✅ |
 | 7 | Humanization (LFSR ±5 ms, ±8 vel) | ✅ |

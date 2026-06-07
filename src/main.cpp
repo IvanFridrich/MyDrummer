@@ -65,6 +65,7 @@ constexpr uint8_t INVALID_SAMPLE = 0xFF;
 static const char* style_name(AutoStyle s) {
     switch (s) {
         case AutoStyle::Blues:    return "Blues";
+        case AutoStyle::Country:  return "Country";
         case AutoStyle::Jazz:     return "Jazz";
         case AutoStyle::Funk:     return "Funk";
         case AutoStyle::Reggae:   return "Reggae";

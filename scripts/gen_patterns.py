@@ -188,6 +188,51 @@ def _gen_blues() -> Tuple[List[Event], int]:
 
 
 # ---------------------------------------------------------------------------
+# Country — boom-chick groove, 100 BPM — 4-bar loop
+#
+# Kick on 1 & 3, snare on 2 & 4 (classic boom-chick).
+# 8th-note closed HH throughout. Tambourine on all upbeats (country jingle).
+# Open HH lift on "and of 4". Bar 4: 8th-note tom fill into final snare.
+# ---------------------------------------------------------------------------
+
+def _gen_country() -> Tuple[List[Event], int]:
+    evs: List[Event] = []
+
+    def country_bar(bar_idx: int, crash: bool = False) -> None:
+        base = _b(bar_idx)
+        if crash:
+            evs.append((base, CRASH, 127))
+        evs.extend([(base, KICK, 110), (base + 2*Q, KICK, 100)])
+        evs.extend([(base + 1*Q, SNARE, 108), (base + 3*Q, SNARE, 112)])
+        for i in range(7):
+            evs.append((base + i * E, HH_CLOSED, 80 if i % 2 == 0 else 65))
+        evs.append((base + 7 * E, HH_OPEN, 70))   # lift on and-of-4
+        for beat in range(4):
+            evs.append((base + beat * Q + E, TAMBOURINE, 72))
+
+    def country_fill(bar_idx: int) -> None:
+        base = _b(bar_idx)
+        evs.extend([(base, KICK, 110), (base + 2*Q, KICK, 100)])
+        evs.append((base + 1*Q, SNARE, 108))
+        for i in range(4):
+            evs.append((base + i * E, HH_CLOSED, 80 if i % 2 == 0 else 65))
+        fill_notes = [TOM_HI, TOM_MID, TOM_LO, SNARE]
+        fill_vels  = [92, 88, 92, 115]
+        for i, (note, vel) in enumerate(zip(fill_notes, fill_vels)):
+            evs.append((base + 2*Q + i * E, note, vel))
+
+    evs += _count_in(0)
+
+    # 4-bar loop (bars 1-4) ← loop start at bar 1
+    country_bar(1, crash=True)
+    country_bar(2)
+    country_bar(3)
+    country_fill(4)
+
+    return evs, 100
+
+
+# ---------------------------------------------------------------------------
 # Jazz — ride swing, 120 BPM — 12-bar form
 #
 # Ride: quarter + swung upbeat. Pedal HH foot on 2 & 4.
@@ -426,6 +471,7 @@ def _gen_hardrock() -> Tuple[List[Event], int]:
 
 PATTERNS = {
     "blues":    _gen_blues,
+    "country":  _gen_country,
     "jazz":     _gen_jazz,
     "funk":     _gen_funk,
     "reggae":   _gen_reggae,

@@ -23,9 +23,10 @@ static size_t do_tick(AutoDrummer& ad, uint32_t n = 64) {
     return ad.tick(n, g_trig, g_vel, 256);
 }
 
-// Cycle to Funk (3rd active style: Off→Blues→Jazz→Funk)
+// Cycle to Funk (4th active style: Off→Blues→Country→Jazz→Funk)
 static void select_funk(AutoDrummer& ad) {
     ad.next_style();   // Blues
+    ad.next_style();   // Country
     ad.next_style();   // Jazz
     ad.next_style();   // Funk
 }
@@ -49,8 +50,8 @@ void test_next_style_activates_blues() {
 
 void test_style_cycles_through_all_and_wraps() {
     AutoDrummer ad;
-    // 7 presses: Off→Blues→Jazz→Funk→Reggae→Gospel→HardRock→Off
-    for (int i = 0; i < 7; ++i) ad.next_style();
+    // 8 presses: Off→Blues→Country→Jazz→Funk→Reggae→Gospel→HardRock→Off
+    for (int i = 0; i < 8; ++i) ad.next_style();
     TEST_ASSERT_EQUAL(AutoStyle::Off, ad.style());
 }
 
@@ -191,7 +192,9 @@ void test_humanize_velocity_in_range() {
 
 void test_restart_on_next_style_replays_intro() {
     // Starting style twice should replay the count-in.
+    // Humanization disabled so timing is deterministic across restarts.
     AutoDrummer ad;
+    ad.set_humanize(false);
     ad.next_style();   // Blues
 
     // Collect first-chunk count
@@ -202,7 +205,7 @@ void test_restart_on_next_style_replays_intro() {
     for (int i = 0; i < 100; ++i) do_tick(ad);
 
     // Wrap around: HardRock → Off → Blues restarts from count-in
-    for (int i = 0; i < 6; ++i) ad.next_style();   // Blues→…→Off
+    for (int i = 0; i < 7; ++i) ad.next_style();   // Blues→…→Off
     ad.next_style();                                  // Off→Blues (fresh start)
 
     size_t restart_tick = do_tick(ad);
