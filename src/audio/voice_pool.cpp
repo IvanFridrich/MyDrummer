@@ -40,13 +40,15 @@ void VoicePool::trigger(uint8_t sample_id, uint8_t velocity)
         }
     }
     // 3. Pool full → steal the voice with the lowest trigger_seq (oldest).
+    //    Serial-number comparison (int32_t subtraction) handles uint32 wrap correctly:
+    //    after ~2^32 triggers the newest seq wraps to 0, which must NOT appear oldest.
     if (slot < 0)
     {
         uint32_t oldest_seq = voices_[0].trigger_seq;
         slot                = 0;
         for (uint16_t i = 1; i < CAPACITY; ++i)
         {
-            if (voices_[i].trigger_seq < oldest_seq)
+            if (static_cast<int32_t>(voices_[i].trigger_seq - oldest_seq) < 0)
             {
                 oldest_seq = voices_[i].trigger_seq;
                 slot       = static_cast<int>(i);

@@ -101,7 +101,8 @@ class Esp32I2s : public II2s
         if (samples > static_cast<size_t>(I2S_DMA_BUF_LEN))
             samples = static_cast<size_t>(I2S_DMA_BUF_LEN);
 
-        uint32_t frames[I2S_DMA_BUF_LEN * 2];
+        // Single-task audio path — static is safe and keeps 1 KB off the FreeRTOS stack.
+        static uint32_t frames[I2S_DMA_BUF_LEN * 2];
         to_i2s_frames(buf, samples, frames);
 
         size_t bytes_written = 0;
@@ -125,9 +126,11 @@ class Esp32Serial : public ISerial
 class Esp32Clock : public IClock
 {
   public:
+    // esp_timer_get_time() is a 64-bit monotonic µs counter with no 32-bit
+    // wrap. Arduino's ::micros() truncates it to 32-bit (wraps every 71.6 min).
     uint64_t micros() override
     {
-        return static_cast<uint64_t>(::micros());
+        return static_cast<uint64_t>(esp_timer_get_time());
     }
     uint32_t millis() override
     {
