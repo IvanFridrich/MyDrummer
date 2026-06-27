@@ -9,8 +9,13 @@
 // without disabling the warning for our own code.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wold-style-cast"
+#pragma GCC diagnostic ignored "-Wcast-align"
+#pragma GCC diagnostic ignored "-Wshadow"
+#pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
+#pragma GCC diagnostic ignored "-Woverloaded-virtual"
 #include <Arduino.h>
 #include <driver/i2s.h>
+#include <TFT_eSPI.h>
 #pragma GCC diagnostic pop
 
 namespace dummer
@@ -153,11 +158,42 @@ class Esp32Clock : public IClock
     }
 };
 
-Esp32Gpio   g_gpio;
-Esp32I2s    g_i2s;
-Esp32Serial g_serial;
-Esp32Clock  g_clock;
-Hal         g_hal {&g_gpio, &g_i2s, &g_serial, &g_clock};
+class Esp32Display : public IDisplay
+{
+  public:
+    bool init() override
+    {
+        tft_.init();
+        tft_.setRotation(1); // landscape: 320 W × 170 H
+        tft_.fillScreen(0x0000);
+        return true;
+    }
+
+    void fill_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) override
+    {
+        tft_.fillRect(x, y, w, h, color);
+    }
+
+    void draw_text(int16_t x, int16_t y, const char* s, uint8_t font,
+                   uint16_t fg, uint16_t bg) override
+    {
+        tft_.setTextColor(fg, bg);
+        tft_.drawString(s, x, y, font);
+    }
+
+    int16_t width() override  { return 320; }
+    int16_t height() override { return 170; }
+
+  private:
+    TFT_eSPI tft_;
+};
+
+Esp32Gpio    g_gpio;
+Esp32I2s     g_i2s;
+Esp32Serial  g_serial;
+Esp32Clock   g_clock;
+Esp32Display g_display;
+Hal          g_hal {&g_gpio, &g_i2s, &g_serial, &g_clock, &g_display};
 
 } // namespace
 

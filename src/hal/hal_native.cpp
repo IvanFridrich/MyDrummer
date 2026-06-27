@@ -80,11 +80,12 @@ void NativeSerial::write(const char* s)
 // ----- Singletons -----
 namespace
 {
-NativeGpio   g_gpio;
-NativeI2s    g_i2s;
-NativeSerial g_serial;
-NativeClock  g_clock;
-Hal          g_hal {&g_gpio, &g_i2s, &g_serial, &g_clock};
+NativeGpio    g_gpio;
+NativeI2s     g_i2s;
+NativeSerial  g_serial;
+NativeClock   g_clock;
+NativeDisplay g_display;
+Hal           g_hal {&g_gpio, &g_i2s, &g_serial, &g_clock, &g_display};
 } // namespace
 
 NativeGpio& gpio()
@@ -102,6 +103,10 @@ NativeSerial& serial()
 NativeClock& clock()
 {
     return g_clock;
+}
+NativeDisplay& display()
+{
+    return g_display;
 }
 
 void reset_all()

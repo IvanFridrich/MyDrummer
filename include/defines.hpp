@@ -114,3 +114,16 @@ enum class ButtonRole
 #define APP_TASK_CORE 1
 #define APP_TASK_STACK 8192
 #define APP_TASK_PRIORITY 5
+
+// ===== LCD display (Waveshare 1.9", 170x320, ST7789V2, SPI) =====
+#define LCD_SCLK 18
+#define LCD_MOSI 19
+#define LCD_CS   21
+#define LCD_DC   16
+#define LCD_RST  17
+
+// ===== Display task =====
+#define DISPLAY_TASK_CORE 0
+#define DISPLAY_TASK_STACK 4096
+#define DISPLAY_TASK_PRIORITY 1
+#define DISPLAY_UPDATE_MS 100

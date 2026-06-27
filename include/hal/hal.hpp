@@ -55,12 +55,24 @@ struct IClock
     virtual void     delay_ms(uint32_t ms) = 0;
 };
 
+struct IDisplay
+{
+    virtual ~IDisplay()                                                                  = default;
+    virtual bool    init()                                                               = 0;
+    virtual void    fill_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t c)  = 0;
+    virtual void    draw_text(int16_t x, int16_t y, const char* s, uint8_t font,
+                              uint16_t fg, uint16_t bg)                                  = 0;
+    virtual int16_t width()                                                              = 0;
+    virtual int16_t height()                                                             = 0;
+};
+
 struct Hal
 {
-    IGpio*   gpio;
-    II2s*    i2s;
-    ISerial* serial;
-    IClock*  clock;
+    IGpio*    gpio;
+    II2s*     i2s;
+    ISerial*  serial;
+    IClock*   clock;
+    IDisplay* display;
 };
 
 } // namespace hal

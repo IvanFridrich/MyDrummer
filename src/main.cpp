@@ -26,6 +26,8 @@
 #include "util/log.hpp"
 #include "control/button_manager.hpp"
 #include "control/led_manager.hpp"
+#include "control/display_state.hpp"
+#include "control/display_ui.hpp"
 #include "audio/voice_pool.hpp"
 #include "audio/mixer.hpp"
 #include "audio/reverb.hpp"
@@ -42,9 +44,12 @@ using ::dummer::audio::Reverb;
 using ::dummer::audio::SAMPLE_COUNT;
 using ::dummer::audio::SampleId;
 using ::dummer::audio::VoicePool;
+using ::dummer::audio::LooperState;
 using ::dummer::control::ButtonEvent;
 using ::dummer::control::ButtonEventType;
 using ::dummer::control::ButtonManager;
+using ::dummer::control::DisplayState;
+using ::dummer::control::DisplayUi;
 using ::dummer::control::LedId;
 using ::dummer::control::LedManager;
 using ::dummer::hal::Hal;
@@ -53,14 +58,19 @@ using ::dummer::hal::HalFactory;
 namespace
 {
 
-Hal*           g_hal     = nullptr;
-ButtonManager* g_buttons = nullptr;
-LedManager*    g_leds    = nullptr;
-VoicePool*     g_pool    = nullptr;
-Mixer*         g_mixer   = nullptr;
-Reverb*        g_reverb  = nullptr;
-Looper*        g_looper  = nullptr;
-AutoDrummer*   g_auto    = nullptr;
+Hal*           g_hal        = nullptr;
+ButtonManager* g_buttons    = nullptr;
+LedManager*    g_leds       = nullptr;
+VoicePool*     g_pool       = nullptr;
+Mixer*         g_mixer      = nullptr;
+Reverb*        g_reverb     = nullptr;
+Looper*        g_looper     = nullptr;
+AutoDrummer*   g_auto       = nullptr;
+DisplayUi*     g_display_ui = nullptr;
+
+volatile DisplayState g_display_state = {};
+
+static uint8_t bpm_for(uint8_t style_val, uint8_t speed);
 
 constexpr uint8_t INVALID_SAMPLE = 0xFF;
 
@@ -180,6 +190,7 @@ static void handle_press(ButtonRole role, const ButtonEvent& ev)
             g_reverb->reset();
         g_reverb->set_enabled(now_on);
         g_leds->set_steady(LedId::Reverb, now_on);
+        g_display_state.reverb_on = now_on;
         LOG_I("REVERB", "%s", now_on ? "ON" : "OFF");
     }
     else if (role == ButtonRole::Looper)
@@ -188,20 +199,31 @@ static void handle_press(ButtonRole role, const ButtonEvent& ev)
         {
             g_auto->stop();
             g_leds->set_steady(LedId::LoopDrum, false);
+            g_display_state.auto_active = false;
         }
         g_looper->on_button_short();
+        g_display_state.looper_state        = static_cast<uint8_t>(g_looper->state());
+        g_display_state.loop_length_samples = g_looper->loop_length();
     }
     else if (role == ButtonRole::AutoDrumStyle)
     {
         g_looper->stop();
+        g_display_state.looper_state        = static_cast<uint8_t>(LooperState::Idle);
+        g_display_state.loop_length_samples = 0;
         g_auto->next_style();
         g_leds->set_steady(LedId::LoopDrum, g_auto->active());
+        g_display_state.style       = static_cast<uint8_t>(g_auto->style());
+        g_display_state.auto_active = g_auto->active();
+        g_display_state.speed       = g_auto->speed();
+        g_display_state.bpm         = bpm_for(static_cast<uint8_t>(g_auto->style()), g_auto->speed());
         LOG_I("AUTO", "style=%s speed=%s", style_name(g_auto->style()),
               speed_name(g_auto->speed()));
     }
     else if (role == ButtonRole::AutoDrumSpeed)
     {
         g_auto->next_speed();
+        g_display_state.speed = g_auto->speed();
+        g_display_state.bpm   = bpm_for(static_cast<uint8_t>(g_auto->style()), g_auto->speed());
         LOG_I("AUTO", "speed=%s", speed_name(g_auto->speed()));
     }
     else
@@ -221,18 +243,65 @@ static void handle_long_press(ButtonRole role)
     if (role == ButtonRole::Looper)
     {
         g_looper->on_button_long();
+        g_display_state.looper_state        = static_cast<uint8_t>(LooperState::Idle);
+        g_display_state.loop_length_samples = 0;
     }
     else if (role == ButtonRole::AutoDrumStyle)
     {
         g_auto->stop();
         g_leds->set_steady(LedId::LoopDrum, false);
+        g_display_state.auto_active = false;
+        g_display_state.style       = static_cast<uint8_t>(AutoStyle::Off);
         LOG_I("AUTO", "stopped");
     }
     else if (role == ButtonRole::AutoDrumSpeed)
     {
         while (g_auto->speed() != 1)
             g_auto->next_speed();
+        g_display_state.speed = g_auto->speed();
+        g_display_state.bpm   = bpm_for(static_cast<uint8_t>(g_auto->style()), g_auto->speed());
         LOG_I("AUTO", "speed reset to normal");
+    }
+}
+
+// BPM table mirrors auto_drummer.cpp; indexed by AutoStyle enum value (0=Off…7=HardRock).
+static uint8_t bpm_for(uint8_t style_val, uint8_t speed)
+{
+    static const uint8_t kBpm[8][3] = {
+        {  0,   0,   0}, // Off
+        { 70,  90, 110}, // Blues
+        { 85, 100, 120}, // Country
+        { 80, 120, 160}, // Jazz
+        { 80, 100, 120}, // Funk
+        { 65,  80,  95}, // Reggae
+        { 70,  90, 110}, // Gospel
+        {100, 120, 140}, // HardRock
+    };
+    return (style_val < 8u && speed < 3u) ? kBpm[style_val][speed] : 0u;
+}
+
+void display_task(void*)
+{
+    g_display_ui->init();
+    DisplayState snap = {};
+    for (;;)
+    {
+        snap.style               = g_display_state.style;
+        snap.auto_active         = g_display_state.auto_active;
+        snap.speed               = g_display_state.speed;
+        snap.bpm                 = g_display_state.bpm;
+        snap.looper_state        = g_display_state.looper_state;
+        snap.loop_length_samples = g_display_state.loop_length_samples;
+        snap.pos_samples         = g_display_state.pos_samples;
+        snap.voice_count         = g_display_state.voice_count;
+        snap.reverb_on           = g_display_state.reverb_on;
+        snap.cpu_max_us          = g_display_state.cpu_max_us;
+        snap.cpu_avg_us          = g_display_state.cpu_avg_us;
+        g_display_ui->render(snap);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+        vTaskDelay(pdMS_TO_TICKS(DISPLAY_UPDATE_MS));
+#pragma GCC diagnostic pop
     }
 }
 
@@ -293,6 +362,14 @@ void app_task(void*)
             g_mixer->get_samples(buf + half * AUDIO_CHUNK, AUDIO_CHUNK);
         }
 
+        // Update display state: voice count + looper position (cheap volatile writes).
+        g_display_state.voice_count = static_cast<uint16_t>(g_pool->active_count());
+        const LooperState ls = g_looper->state();
+        if (ls == LooperState::Recording)
+            g_display_state.pos_samples = g_looper->record_pos();
+        else if (ls == LooperState::Playing)
+            g_display_state.pos_samples = g_looper->play_pos();
+
         // Profiler: measure CPU work before the blocking write.
         const uint32_t dt = static_cast<uint32_t>(g_hal->clock->micros() - t0);
         if (dt > loop_max_us)
@@ -305,8 +382,11 @@ void app_task(void*)
         const uint32_t now_ms = g_hal->clock->millis();
         if (now_ms - last_log_ms >= PROFILER_LOG_INTERVAL_MS)
         {
+            const uint32_t avg = static_cast<uint32_t>(loop_total / loop_n);
             LOG_I("LOOP", "cpu max=%u avg=%u us  n=%u", static_cast<unsigned>(loop_max_us),
-                  static_cast<unsigned>(loop_total / loop_n), static_cast<unsigned>(loop_n));
+                  static_cast<unsigned>(avg), static_cast<unsigned>(loop_n));
+            g_display_state.cpu_max_us = loop_max_us;
+            g_display_state.cpu_avg_us = avg;
             loop_max_us = 0;
             loop_total  = 0;
             loop_n      = 0;
@@ -345,13 +425,16 @@ void setup()
     static Looper        lo;
     static AutoDrummer   ad;
 
-    g_buttons = &bm;
-    g_leds    = &lm;
-    g_pool    = &vp;
-    g_mixer   = &mx;
-    g_reverb  = &rv;
-    g_looper  = &lo;
-    g_auto    = &ad;
+    static DisplayUi du(*g_hal->display);
+
+    g_buttons    = &bm;
+    g_leds       = &lm;
+    g_pool       = &vp;
+    g_mixer      = &mx;
+    g_reverb     = &rv;
+    g_looper     = &lo;
+    g_auto       = &ad;
+    g_display_ui = &du;
 
     g_buttons->begin();
     g_leds->begin();
@@ -367,6 +450,9 @@ void setup()
         while (true)
             vTaskDelay(pdMS_TO_TICKS(500));
     }
+    if (xTaskCreatePinnedToCore(display_task, "display", DISPLAY_TASK_STACK, nullptr,
+                                DISPLAY_TASK_PRIORITY, nullptr, DISPLAY_TASK_CORE) != pdPASS)
+        LOG_W("BOOT", "display task creation failed");
 #pragma GCC diagnostic pop
 }
 

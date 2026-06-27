@@ -53,6 +53,9 @@ class Looper
     {
         return state_;
     }
+    uint32_t record_pos()  const { return record_pos_; }
+    uint32_t play_pos()    const { return play_pos_; }
+    uint32_t loop_length() const { return loop_length_; }
 
     // Stop playback/recording and clear all loop data. Idempotent.
     // Called by the auto-drummer for mutual exclusion.

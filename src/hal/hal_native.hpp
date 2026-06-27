@@ -140,11 +140,22 @@ class NativeClock : public IClock
     uint64_t now_us_ = 0;
 };
 
+class NativeDisplay : public IDisplay
+{
+  public:
+    bool    init() override { return true; }
+    void    fill_rect(int16_t, int16_t, int16_t, int16_t, uint16_t) override {}
+    void    draw_text(int16_t, int16_t, const char*, uint8_t, uint16_t, uint16_t) override {}
+    int16_t width() override { return 320; }
+    int16_t height() override { return 170; }
+};
+
 // Direct access to the singletons for tests.
-NativeGpio&   gpio();
-NativeI2s&    i2s();
-NativeSerial& serial();
-NativeClock&  clock();
+NativeGpio&    gpio();
+NativeI2s&     i2s();
+NativeSerial&  serial();
+NativeClock&   clock();
+NativeDisplay& display();
 
 // Wipe all stub state (call between tests).
 void reset_all();
