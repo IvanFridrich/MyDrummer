@@ -3,6 +3,7 @@
 #include "hal/hal.hpp"
 #include "hal_factory.hpp"
 #include "defines.hpp"
+#include "util/log.hpp"
 
 // Framework headers use old-style casts; silence them for the include block
 // without disabling the warning for our own code.
@@ -92,7 +93,8 @@ class Esp32I2s : public II2s
         if (i2s_set_pin(I2S_NUM, &pins) != ESP_OK)
             return false;
 
-        i2s_zero_dma_buffer(I2S_NUM);
+        if (i2s_zero_dma_buffer(I2S_NUM) != ESP_OK)
+            LOG_W("I2S", "zero DMA buffer failed");
         return true;
     }
 
@@ -105,8 +107,17 @@ class Esp32I2s : public II2s
         static uint32_t frames[I2S_DMA_BUF_LEN * 2];
         to_i2s_frames(buf, samples, frames);
 
-        size_t bytes_written = 0;
-        i2s_write(I2S_NUM, frames, samples * 2 * sizeof(uint32_t), &bytes_written, portMAX_DELAY);
+        const size_t expected      = samples * 2 * sizeof(uint32_t);
+        size_t       bytes_written = 0;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+        if (i2s_write(I2S_NUM, frames, expected, &bytes_written, portMAX_DELAY) != ESP_OK
+            || bytes_written != expected)
+        {
+            LOG_W("I2S", "write error: got %u of %u bytes",
+                  static_cast<unsigned>(bytes_written), static_cast<unsigned>(expected));
+        }
+#pragma GCC diagnostic pop
     }
 };
 

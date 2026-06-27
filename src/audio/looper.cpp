@@ -26,7 +26,8 @@ void Looper::on_button_short()
         break;
     case LooperState::Recording:
         start_playing();
-        LOG_I("LOOPER", "Playing (%lu samples)", static_cast<unsigned long>(loop_length_));
+        if (state_ == LooperState::Playing)
+            LOG_I("LOOPER", "Playing (%lu samples)", static_cast<unsigned long>(loop_length_));
         break;
     case LooperState::Playing:
         stop();
@@ -131,6 +132,7 @@ void Looper::start_playing()
     if (record_pos_ == 0)
     {
         stop();
+        LOG_W("LOOPER", "empty recording discarded");
         return;
     }
     loop_length_ = record_pos_;

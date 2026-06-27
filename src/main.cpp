@@ -18,6 +18,8 @@
 #include <freertos/task.h>
 #pragma GCC diagnostic pop
 
+#include <esp_task_wdt.h>
+
 #include "defines.hpp"
 #include "hal/hal.hpp"
 #include "hal/hal_factory.hpp"
@@ -243,6 +245,9 @@ void app_task(void*)
     uint32_t loop_n      = 0;
     uint32_t last_log_ms = 0;
 
+    if (esp_task_wdt_add(nullptr) != ESP_OK)
+        LOG_E("TWDT", "register failed — no watchdog coverage");
+
     for (;;)
     {
         const uint64_t t0 = g_hal->clock->micros();
@@ -311,6 +316,7 @@ void app_task(void*)
         // 4. Blocking write — yields to RTOS until DMA accepts the full buffer.
         //    No vTaskDelay needed; write() blocks internally via portMAX_DELAY.
         g_hal->i2s->write(buf, I2S_DMA_BUF_LEN);
+        esp_task_wdt_reset(); // confirm loop completed; if write() stalls WDT fires
     }
 }
 
@@ -357,7 +363,9 @@ void setup()
 #pragma GCC diagnostic ignored "-Wold-style-cast"
     if (ok != pdPASS)
     {
-        LOG_E("BOOT", "xTaskCreatePinnedToCore failed");
+        LOG_E("BOOT", "xTaskCreatePinnedToCore failed — halting");
+        while (true)
+            vTaskDelay(pdMS_TO_TICKS(500));
     }
 #pragma GCC diagnostic pop
 }
